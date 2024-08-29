@@ -1,0 +1,1611 @@
+#pragma TextEncoding = "UTF-8"
+#pragma rtGlobals=3		// Use modern global access method and strict wave access.
+
+
+Window Panel0() : Panel
+	PauseUpdate; Silent 1		// building window...
+	NewPanel /W=(229,54,1831,871)
+	ShowTools/A
+	SetDrawLayer UserBack
+	DrawText 142,91,"Length [ms]"
+	DrawText 225,91,"V start [mV]"
+	DrawText 298,91,"V end [mV]"
+	DrawText 45,144,"Current segment:"
+	DrawText 38,116,"Previous segment:"
+	DrawText 62,177,"Next segment:"
+	SetDrawEnv linethick= 2,fillpat= 0
+	DrawRect 33,123,363,152
+	SetDrawLayer Overlay
+	SetDrawEnv xcoord= abs,ycoord= rel,linethick= 2,linefgc= (13107,13107,13107)
+	DrawLine 831.439867427801,0,831.439867427801,1
+	SetDrawEnv xcoord= abs,ycoord= rel,linethick= 2,linefgc= (13107,13107,13107)
+	DrawLine 839.859867427802,0,839.859867427802,1
+	SetDrawEnv fillpat= 0
+	DrawRect 20,45,506,301
+	SetDrawEnv fillpat= 0
+	DrawRect 511,45,806,301
+	SetDrawEnv fsize= 18,fstyle= 1
+	DrawText 34,73,"Full arbitrary"
+	SetDrawEnv fsize= 18,fstyle= 1
+	DrawText 521,73,"Predefined patterns"
+	SetDrawEnv fillpat= 0
+	DrawRect 862,104,1157,238
+	SetDrawLayer UserBack
+	ValDisplay PrevSegVstart,pos={229.00,100.00},size={52.00,17.00}
+	ValDisplay PrevSegVstart,limits={0,0,0},barmisc={0,1000},mode= 4,value= #"0"
+	ValDisplay PrevSegVend,pos={301.00,100.00},size={52.00,17.00}
+	ValDisplay PrevSegVend,limits={0,0,0},barmisc={0,1000},mode= 4,value= #"0"
+	ValDisplay PrevSegLength,pos={147.00,100.00},size={52.00,17.00}
+	ValDisplay PrevSegLength,limits={0,0,0},barmisc={0,1000},mode= 4,value= #"0"
+	SetVariable CurrSegVstart,pos={230.00,129.00},size={50.00,18.00}
+	SetVariable CurrSegVstart,limits={-inf,inf,0},value= _NUM:0
+	SetVariable CurrSegVend,pos={302.00,129.00},size={50.00,18.00}
+	SetVariable CurrSegVend,valueBackColor=(61166,61166,61166)
+	SetVariable CurrSegVend,limits={-inf,inf,0},value= _NUM:0,noedit= 1
+	SetVariable CurrSegLength,pos={148.00,129.00},size={50.00,18.00}
+	SetVariable CurrSegLength,limits={-inf,inf,0},value= _NUM:0
+	Slider SegSelector,pos={138.00,194.00},size={360.00,56.00},proc=SliderProc
+	Slider SegSelector,limits={0,0,1},variable= root:Program_variables:CurrSegment,vert= 0
+	Button SaveSeg,pos={383.00,98.00},size={108.00,25.00},proc=SaveSegmentProc,title="Add Segment"
+	ValDisplay NextSegLength,pos={148.00,164.00},size={50.00,17.00}
+	ValDisplay NextSegLength,limits={0,0,0},barmisc={0,1000},mode= 4,value= #"0"
+	ValDisplay NextSegVstart,pos={230.00,164.00},size={50.00,17.00}
+	ValDisplay NextSegVstart,limits={0,0,0},barmisc={0,1000},mode= 4,value= #"0"
+	ValDisplay NextSegVend,pos={302.00,164.00},size={50.00,17.00}
+	ValDisplay NextSegVend,limits={0,0,0},barmisc={0,1000},mode= 4,value= #"0"
+	CheckBox IsPlh,pos={369.00,131.00},size={113.00,15.00},proc=ConstSegProc,title="Constant segment"
+	CheckBox IsPlh,value= 1
+	Button ClrSegData,pos={28.00,259.00},size={107.00,28.00},proc=ClrSegProc,title="Clear Segments"
+	Button ClrSegData,fColor=(65535,16385,16385)
+	Button SaveSegData,pos={22.00,727.00},size={119.00,52.00},proc=SaveSegProc,title="\\JCSave Segments\rData"
+	Button SaveSegData,fStyle=1,fColor=(1,52428,26586)
+	SetVariable IV_Tlength,pos={523.00,107.00},size={180.00,18.00},title="IV Total length [ms]     "
+	SetVariable IV_Tlength,valueBackColor=(49151,65535,49151)
+	SetVariable IV_Tlength,limits={-inf,inf,0},value= root:Signal_variables:IV_TlengthVar
+	SetVariable IV_Plength,pos={522.00,131.00},size={180.00,18.00},title="IV plateau length [ms] "
+	SetVariable IV_Plength,valueBackColor=(65535,54607,32768)
+	SetVariable IV_Plength,limits={-inf,inf,0},value= root:Signal_variables:IV_PlengthVar,noedit= 1
+	SetVariable IV_Nplh,pos={523.00,156.00},size={180.00,18.00},title="IV plateau num             "
+	SetVariable IV_Nplh,valueBackColor=(65535,54607,32768)
+	SetVariable IV_Nplh,limits={-inf,inf,0},value= root:Signal_variables:IV_NplhVar,noedit= 1
+	SetVariable IV_Ampl,pos={523.00,202.00},size={180.00,18.00},title="IV Ampl [mV]                "
+	SetVariable IV_Ampl,valueBackColor=(49151,65535,49151)
+	SetVariable IV_Ampl,limits={-inf,inf,0},value= root:Signal_variables:IV_AmplVar
+	SetVariable IV_step,pos={523.00,179.00},size={180.00,18.00},title="IV step height [mV]      "
+	SetVariable IV_step,valueBackColor=(49151,65535,49151)
+	SetVariable IV_step,limits={-inf,inf,0},value= root:Signal_variables:IV_stepVar
+	PopupMenu PreDefSel,pos={523.00,79.00},size={181.00,19.00},proc=PreDefMenu,title="Predefined patterns"
+	PopupMenu PreDefSel,mode=5,popvalue="AIV type 2",value= #"\"IV type 1;IV type 2;IV type 3;AIV type 1;AIV type 2;AIV type 2 EXTRA\""
+	Button GenPattern,pos={530.00,250.00},size={174.00,40.00},proc=GenPatternProc,title="Generate Pattern"
+	SetVariable IV_Ampl_neg,pos={523.00,226.00},size={180.00,18.00},title="IV Ampl Neg [mV]        "
+	SetVariable IV_Ampl_neg,valueBackColor=(49151,65535,49151)
+	SetVariable IV_Ampl_neg,limits={-inf,inf,0},value= root:Signal_variables:IV_AmplVar_neg
+	Button LoadSegData,pos={159.00,727.00},size={119.00,52.00},proc=LoadSegProc,title="Load Segments\rData\\JC"
+	Button LoadSegData,fStyle=1,fColor=(65535,43690,0)
+	TabControl ArbGenTab,pos={7.00,11.00},size={817.00,787.00}
+	TabControl ArbGenTab,labelBack=(61166,61166,61166),fSize=18,fStyle=1
+	TabControl ArbGenTab,tabLabel(0)="Arbitrary generator",value= 0
+	Button LoadMeasData,pos={861.00,45.00},size={115.00,50.00},proc=LoadMeasProc,title="\\JCLoad Measured\rData"
+	Button LoadMeasData,fStyle=1,fColor=(65535,43690,0)
+	ListBox FileList,pos={1354.00,47.00},size={216.00,244.00},proc=ListBoxProc
+	ListBox FileList,listWave=root:Program_variables:In_data_names,mode= 2,selRow= 0
+	Button ClrMeas,pos={1270.00,240.00},size={75.00,44.00},proc=ClrMeasProc,title="\\JCClear All\rData"
+	Button ClrMeas,fColor=(65535,32768,32768)
+	CheckBox AutoSave,pos={1008.00,52.00},size={69.00,15.00},title="Auto Save"
+	CheckBox AutoSave,value= 0
+	PopupMenu G1select,pos={1306.00,730.00},size={252.00,19.00},bodyWidth=150,proc=G1selectMenu,title="Select graph mode"
+	PopupMenu G1select,mode=4,popvalue="Segms. AvgR vs AvgV",value= #"\"Segm. Current vs Time;Segm. AvgPSD;Segms. AvgI vs AvgV;Segms. AvgR vs AvgV;Segms. VarI vs AvgV\""
+	ValDisplay dfDisp,pos={872.00,206.00},size={150.00,17.00},title="df                        "
+	ValDisplay dfDisp,limits={0,0,0},barmisc={0,1000},mode= 4
+	ValDisplay dfDisp,value= _NUM:15.2587890625
+	SetVariable dtSet,pos={872.00,117.00},size={150.00,18.00},title="Set dt [ms]        "
+	SetVariable dtSet,limits={0,inf,0},value= _NUM:150
+	PopupMenu G0select,pos={493.00,730.00},size={262.00,19.00},bodyWidth=160,proc=G0selectMenu,title="Select graph mode"
+	PopupMenu G0select,mode=1,popvalue="Signal vs Time",value= #"\"Signal vs Time;Current vs Time;Resistance vs Time;Segm. Current vs Time;Segms. AvgI vs AvgV; I vs V\""
+	SetVariable CutStart,pos={872.00,139.00},size={150.00,18.00},title="Cut start [ms]   "
+	SetVariable CutStart,limits={0,inf,0},value= _NUM:10
+	SetVariable CutStop,pos={872.00,163.00},size={150.00,18.00},proc=CutStopProc,title="Cut stop [ms]   "
+	SetVariable CutStop,limits={0,inf,0},value= _NUM:1
+	ValDisplay dtApp,pos={872.00,184.00},size={150.00,17.00},title="Applied dt [ms]"
+	ValDisplay dtApp,limits={0,0,0},barmisc={0,1000},mode= 4,value= _NUM:65.536
+	Button CalcPSDButton,pos={1050.00,112.00},size={100.00,34.00},proc=CalcPSDProc,title="Recalculate\rSegments"
+	Button CutData,pos={1050.00,149.00},size={100.00,34.00},proc=CutDataProc,title="Cut Segment\nbetween cursors"
+	Button SavePSDButton,pos={1231.00,45.00},size={115.00,50.00},proc=SavePSDProc,title="Save\rPSDs"
+	Button SavePSDButton,fStyle=1,fColor=(1,52428,26586)
+	Button CompOffset,pos={1050.00,248.00},size={90.00,34.00},proc=CompOffsetProc,title="Compensate\rOffset"
+	SetVariable CompOffsetVar,pos={872.00,249.00},size={170.00,33.00},title="Drive voltage offset\ncompensation value [mV]"
+	SetVariable CompOffsetVar,limits={-inf,inf,0},value= _NUM:0
+	CheckBox G0AutoScaleX,pos={494.00,753.00},size={81.00,15.00},title="Auto scale X"
+	CheckBox G0AutoScaleX,value= 1
+	CheckBox G0AutoScaleY,pos={494.00,774.00},size={81.00,15.00},title="Auto scale Y"
+	CheckBox G0AutoScaleY,value= 1
+	CheckBox BoolPSDs,pos={1482.00,757.00},size={76.00,15.00},title="Plot all PDS"
+	CheckBox BoolPSDs,value= 0
+	ValDisplay CurrSegm,pos={30.00,198.00},size={105.00,17.00},title="Curr. segm.:"
+	ValDisplay CurrSegm,limits={0,0,0},barmisc={0,1000},mode= 4
+	ValDisplay CurrSegm,value= #"root:Signal_variables:CurrSegment"
+	CheckBox Invert,pos={720.00,258.00},size={80.00,15.00},title="Invert signal"
+	CheckBox Invert,value= 0
+	CheckBox autoclear,pos={1008.00,74.00},size={171.00,15.00},title="Auto clear (for large datasets)"
+	CheckBox autoclear,value= 0
+	CheckBox HalfIV_chbox,pos={748.00,81.00},size={51.00,15.00},title="Half IV"
+	CheckBox HalfIV_chbox,value= 0
+	Button RepSign,pos={383.00,249.00},size={120.00,24.00},proc=SignRepButton,title="Repeat actual signal"
+	SetVariable NumRep,pos={248.00,252.00},size={130.00,18.00},title="Num. of repetitions"
+	SetVariable NumRep,limits={-inf,inf,0},value= _NUM:2
+	SetVariable NumSubSegm,pos={249.00,279.00},size={130.00,18.00},title="Num. of sub segm."
+	SetVariable NumSubSegm,limits={-inf,inf,0},value= _NUM:2
+	Button DivSegm,pos={383.00,275.00},size={120.00,24.00},proc=DivSegmButton,title="Divide current segm."
+	Button ReplSign,pos={1050.00,188.00},size={100.00,34.00},proc=ReplSignButton,title="Replace signal\nand recalculate"
+	TabControl PSDEvalTab,pos={849.00,11.00},size={746.00,787.00}
+	TabControl PSDEvalTab,labelBack=(61166,61166,61166),fSize=18,fStyle=1
+	TabControl PSDEvalTab,tabLabel(0)="PSD Evaluator",value= 0
+	SetWindow kwTopWin,hook(MyHook)=StepArrow
+	Execute/Q/Z "SetWindow kwTopWin sizeLimit={33,48,inf,inf}" // sizeLimit requires Igor 7 or later
+	String fldrSav0= GetDataFolder(1)
+	SetDataFolder root:Plot_variables:
+	Display/W=(20,306,807,720)/HOST=#  G0left vs G0bottom
+	AppendToGraph G0left2 vs G0bottom2
+	SetDataFolder fldrSav0
+	ModifyGraph lSize=2
+	ModifyGraph rgb(G0left)=(16385,28398,65535)
+	ModifyGraph msize=5
+	ModifyGraph mrkThick=2
+	ModifyGraph grid=1
+	ModifyGraph tick=2
+	ModifyGraph mirror=1
+	ModifyGraph fSize=18
+	ModifyGraph axOffset(left)=0.5,axOffset(bottom)=-0.190476
+	ModifyGraph axThick=3
+	ModifyGraph gridRGB=(26214,26214,26214)
+	Label left "Agilent signal [mV]"
+	Label bottom "Time [ms]"
+	Cursor/P A G0left 0;Cursor/P B G0left 0
+	RenameWindow #,G0
+	SetActiveSubwindow ##
+	String fldrSav1= GetDataFolder(1)
+	SetDataFolder root:Plot_variables:
+	Display/W=(862,306,1572,720)/HOST=#  G1left vs G1bottom
+	SetDataFolder fldrSav1
+	ModifyGraph lSize=2
+	ModifyGraph msize=5
+	ModifyGraph mrkThick=2
+	ModifyGraph log=1
+	ModifyGraph tick=2
+	ModifyGraph mirror=1
+	ModifyGraph fSize=18
+	ModifyGraph axThick=3
+	Label left "PSD [A/sqrt(Hz)]"
+	Label bottom "f [Hz]"
+	RenameWindow #,G1
+	SetActiveSubwindow ##
+EndMacro
+
+
+Function SaveSegmentProc(ba) : ButtonControl
+	STRUCT WMButtonAction &ba
+	Wave SegmentsData=root:Signal_variables:SegmentsData
+	NVar NumOfSegments=root:Signal_variables:NumOfSegments
+	NVar CurrSegment=root:Signal_variables:CurrSegment
+	Wave /T In_data_names=root:Program_variables:In_data_names
+	NVAR data_sel=root:Program_variables:data_sel
+	switch( ba.eventCode )
+		case 2: // mouse up
+			data_sel=DimSize(In_data_names,0)-1
+			ListBox FileList selRow=data_sel
+			ControlInfo CurrSegLength
+			if(V_value>0)
+				SegmentsData[CurrSegment][0]=V_value
+			else
+				print "Length of a segment must be greater than 0!"
+				break
+			endif
+			ValDisplay PrevSegLength value=0
+			ValDisplay PrevSegLength value=_NUM:SegmentsData[CurrSegment][0]
+			//SetVariable CurrSegLength value=_NUM:0
+			ControlInfo CurrSegVstart
+			SegmentsData[CurrSegment][1]=V_value
+			ValDisplay PrevSegVstart value=0
+			ValDisplay PrevSegVstart value=_NUM:SegmentsData[CurrSegment][1]
+			SetVariable CurrSegVstart value=_NUM:0
+			ControlInfo IsPlh
+			if(V_Value)
+				SegmentsData[CurrSegment][2]=SegmentsData[CurrSegment][1]
+				ValDisplay PrevSegVend value=0
+				ValDisplay PrevSegVend value=_NUM:SegmentsData[CurrSegment][1]
+			else
+				ControlInfo CurrSegVend
+				SegmentsData[CurrSegment][2]=V_value
+				ValDisplay PrevSegVend value=0
+				ValDisplay PrevSegVend value=_NUM:SegmentsData[CurrSegment][2]
+			endif
+				SetVariable CurrSegVend value=_NUM:0
+				CurrSegment=CurrSegment+1
+			if(CurrSegment==NumOfSegments)
+				NumOfSegments=NumOfSegments+1
+			endif
+
+			Redimension/N=(NumOfSegments,-1) SegmentsData
+			Slider SegSelector limits= {0,NumOfSegments-1,1}
+			Slider SegSelector value=CurrSegment
+			StepSegm(CurrSegment)
+			generate_signal()
+			MakePlot()
+			break
+		case -1: // control being killed
+			break
+	endswitch
+
+	return 0
+End
+
+
+Function ClrSegProc(ba) : ButtonControl
+	STRUCT WMButtonAction &ba
+	switch( ba.eventCode )
+		case 2: // mouse up
+ 			ClearSegm()
+			break
+		case -1: // control being killed
+			break
+	endswitch
+
+	return 0
+End
+
+
+Function ConstSegProc(cba) : CheckBoxControl
+	STRUCT WMCheckboxAction &cba
+
+	switch( cba.eventCode )
+		case 2: // mouse up
+			Variable checked = cba.checked
+			if(checked)
+				SetVariable CurrSegVend noedit=1
+				SetVariable CurrSegVend valueBackColor=(61166,61166,61166)
+			else
+				SetVariable CurrSegVend noedit=0
+				SetVariable CurrSegVend valueBackColor=(65535,65535,65535)
+			endif
+			break
+		case -1: // control being killed
+			break
+	endswitch
+
+	return 0
+End
+
+
+Function SliderProc(sa) : SliderControl
+	STRUCT WMSliderAction &sa
+	switch( sa.eventCode )
+		case -3: // Control received keyboard focus
+		case -2: // Control lost keyboard focus
+		case -1: // Control being killed
+			break
+		default:
+			if( sa.eventCode & 1 ) // value set
+				Variable curval = sa.curval
+				StepSegm(curval)
+			endif	
+
+			break
+	endswitch
+
+	return 0
+End
+
+
+Function generate_signal()
+
+	Wave SegmentsData=root:Signal_variables:SegmentsData
+	NVar NumOfSegments=root:Signal_variables:NumOfSegments
+	NVar CurrSegment=root:Signal_variables:CurrSegment
+	NVar length=root:Signal_variables:length
+	NVar dt=root:Signal_variables:dt
+	
+	
+	//Meghatározza a hosszát a teljes jelek. Azért kell így, mert az utolsó sort üres szegmens nem kell figyelembe venni, ezért DimSize-1.ig megy
+	variable k=0
+	length=0
+	for(k=0;k<DimSize(SegmentsData,0)-1;k=k+1)
+		length+=SegmentsData[k][0]
+	endfor
+	Variable temp=0
+	
+	//elvi lépésköz kiszímítása
+	dt=length/65535 //65536 pontunk van, de ez valójában 65535 pontra osztja a teljes időtartamot, ezért ezzel kell dt-t számolni
+	////Pontos időzítés kiszámítása
+	////Megnézzük, hogy a 65536 pontra leképezve hol lesz az utolsó szegmens vége, mert valójában itt van vége a jelnek, tehát a valós dt-t úgy kell számolni, hogy ennél a pontnál jöjjön ki a teljes idő
+	//for(k=0;k<(NumOfSegments-1);k=k+1)
+	//temp+=floor(SegmentsData[k][0]/dt)
+	//endfor
+	//dt=length/temp //Valós dt kiszámítása
+	//length=dt*65535 //A teljes mérés pedig ilyen hosszú lesz, így a szegmensek vége a valóságban kb oda esik, ahova a definíciókor akartuk
+	//temp=0
+	Make /O/N=(2*(NumOfSegments-1)) root:Signal_variables:indexes //Azért NumOfSegments-1, mert az utolsó szegmens nem valódi, az csak a bevitel miatt van, így azzal nem foglalkozunk
+	Make /O/N=(2*(NumOfSegments-1)) root:Signal_variables:time_ms
+	Make /O/N=(2*(NumOfSegments-1)) root:Signal_variables:signal
+	Make /O/N=(2+3*(NumOfSegments-1)+65536) root:Signal_variables:Arbitrary_out //2, mert a hosszal és a szegmensek számával kezdődik az output, 3*NumOfSegments, mert tárolja a szegmensek három értékét, aztán pedig a 65536 pont
+	Wave indexes=root:Signal_variables:indexes
+	Wave time_ms=root:Signal_variables:time_ms
+	Wave signal=root:Signal_variables:signal
+	Wave Arbitrary_out=root:Signal_variables:Arbitrary_out
+	Arbitrary_out=0
+	
+	if(NumOfSegments>1) //Azért kell, hogy törléskor és üres SegmData-ra ne futtassa le a generálást
+		Arbitrary_out[0]=length/1000
+		Arbitrary_out[1]=NumOfSegments-1
+		
+		Variable i=0
+		Variable j=0
+		indexes[0]=0
+		indexes[1]=floor(SegmentsData[0][0]/dt)
+		time_ms[0]=0
+		time_ms[1]=SegmentsData[0][0]
+		signal[0]=SegmentsData[0][1]
+		signal[1]=SegmentsData[0][2]
+		//Első szegmens adatai
+		Arbitrary_out[2]=indexes[1]
+		Arbitrary_out[3]=SegmentsData[0][1]/1000
+		Arbitrary_out[4]=SegmentsData[0][2]/1000
+		for(j=0;j<=indexes[1];j=j+1)
+			Arbitrary_out[2+3*(NumOfSegments-1)+j]=((SegmentsData[i][2]-SegmentsData[i][1])/(floor(SegmentsData[i][0]/dt))*j+SegmentsData[i][1])/1000
+		endfor
+		temp=SegmentsData[0][0]
+		//Többi szegmens adatai
+		for(i=1;i<(NumOfSegments-1);i=i+1)
+			indexes[2*i]=indexes[2*i-1]
+			temp+=SegmentsData[i][0]
+			indexes[2*i+1]=floor(temp/dt)
+			time_ms[2*i]=time_ms[2*i-1]
+			time_ms[2*i+1]=time_ms[2*i]+SegmentsData[i][0]
+			signal[2*i]=SegmentsData[i][1]
+			signal[2*i+1]=SegmentsData[i][2]
+			Arbitrary_out[2+3*i]=indexes[2*i+1]
+			Arbitrary_out[2+3*i+1]=SegmentsData[i][1]/1000
+			Arbitrary_out[2+3*i+2]=SegmentsData[i][2]/1000
+			for(j=indexes[2*i]+1;j<=indexes[2*i+1];j=j+1)
+				Arbitrary_out[2+3*(NumOfSegments-1)+j]=((SegmentsData[i][2]-SegmentsData[i][1])/(indexes[2*i+1]-indexes[2*i]-1)*(j-indexes[2*i]-1)+SegmentsData[i][1])/1000
+			endfor
+		endfor
+		
+		//PopupMenu G0select mode=1
+		Duplicate /O signal,root:Plot_variables:G0left
+		Duplicate /O time_ms,root:Plot_variables:G0bottom
+		Duplicate /O /R=[2*CurrSegment,2*CurrSegment+1] signal,root:Plot_variables:G0left2
+		Duplicate /O /R=[2*CurrSegment,2*CurrSegment+1] time_ms,root:Plot_variables:G0bottom2
+		
+		//Duplicate /O /R=[SegmPSD[CurrSegment][2],SegmPSD[CurrSegment][3]] Current,root:Plot_variables:G1left
+		
+		//ReplaceWave /W=Panel0#G0 trace=signal#1, signal[2*CurrSegment,2*CurrSegment+1];DelayUpdate
+		//ReplaceWave /W=Panel0#G0 /X trace=signal#1, time_ms[2*CurrSegment,2*CurrSegment+1]
+		
+	else
+	
+	endif
+End
+
+
+Function /WAVE linspace(first,last,num)
+
+	Variable first
+	Variable last
+	Variable num
+	
+	Make /O/D/N=(num) result
+	result=p*(last-first)/(num-1)+first
+	
+	return result
+
+End
+
+
+Function SaveSegProc(ba) : ButtonControl
+	STRUCT WMButtonAction &ba
+	NVar NumOfSegments=root:Signal_variables:NumOfSegments
+	switch( ba.eventCode )
+		case 2: // mouse up
+			//ControlInfo SaveFileName
+			if(NumOfSegments>1)
+				Save/G/M="\r\n" root:Signal_variables:Arbitrary_out
+			else
+				print "There are no segments to save!"
+				break
+			endif
+			break
+		case -1: // control being killed
+			break
+	endswitch
+
+	return 0
+End
+
+
+Function calcIV(type)
+	Variable type
+	Wave SegmentsData=root:Signal_variables:SegmentsData
+	NVar NumOfSegments=root:Signal_variables:NumOfSegments
+	NVar CurrSegment=root:Signal_variables:CurrSegment
+	
+	NVar IV_AmplVar=root:Signal_variables:IV_AmplVar
+	NVar IV_AmplVar_neg=root:Signal_variables:IV_AmplVar_neg
+	NVar IV_NplhVar=root:Signal_variables:IV_NplhVar
+	NVar IV_PlengthVar=root:Signal_variables:IV_PlengthVar
+	NVar IV_stepVar=root:Signal_variables:IV_stepVar
+	NVar IV_TlengthVar=root:Signal_variables:IV_TlengthVar
+	
+	Variable temp_offset=0
+	Variable temp_neg_Plength=0
+	Variable temp_neg_stepVar=0
+	Variable temp_neg_Ampl=0
+	Variable temp_SWrate=0
+	
+	if(type==1&&IV_stepVar>0&&IV_NplhVar>0&&IV_PlengthVar>0)
+		IV_TlengthVar=4*IV_NplhVar*IV_PlengthVar
+		IV_AmplVar=IV_NplhVar*IV_stepVar
+		temp_neg_stepVar=IV_stepVar
+		temp_neg_Plength=IV_PlengthVar
+		temp_neg_Ampl=IV_AmplVar
+		
+	elseif(type==2&&IV_AmplVar>0&&IV_NplhVar>0&&IV_TlengthVar>0)
+		IV_PlengthVar=IV_TlengthVar/4/IV_NplhVar
+		IV_stepVar=IV_AmplVar/IV_NplhVar
+		temp_neg_stepVar=IV_stepVar
+		temp_neg_Plength=IV_PlengthVar
+		temp_neg_Ampl=IV_AmplVar
+	
+	elseif(type==3&&IV_AmplVar>0&&IV_stepVar>0&&IV_TlengthVar>0)
+		IV_PlengthVar=IV_TlengthVar/4/IV_NplhVar
+		temp_neg_Ampl=IV_AmplVar
+		if(mod(IV_AmplVar,IV_stepVar)==0)
+			IV_NplhVar=IV_AmplVar/IV_stepVar
+		else
+			IV_NplhVar=ceil(IV_AmplVar/IV_stepVar)
+			IV_stepVar=IV_AmplVar/IV_NplhVar
+			print "WARNING: IV step height is changed!"
+		endif
+		IV_PlengthVar=IV_TlengthVar/4/IV_NplhVar
+		temp_neg_stepVar=IV_stepVar
+		temp_neg_Plength=IV_PlengthVar
+	
+	elseif(type==4&&IV_AmplVar>0&&IV_stepVar>0&&IV_TlengthVar>0)
+		temp_offset=(IV_AmplVar-IV_AmplVar_neg)/2
+		IV_AmplVar=(IV_AmplVar+IV_AmplVar_neg)/2
+		if(mod(IV_AmplVar,IV_stepVar)==0)
+			IV_NplhVar=IV_AmplVar/IV_stepVar
+		else
+			IV_NplhVar=ceil(IV_AmplVar/IV_stepVar)
+			IV_stepVar=IV_AmplVar/IV_NplhVar
+			print "WARNING: IV step height is changed!"
+		endif
+		IV_PlengthVar=IV_TlengthVar/(4*IV_NplhVar+0) //itt a plusz X azt állítja, hogy a két berakott plató beleszámítson, vagy ne a teljes hosszba
+		temp_neg_Ampl=IV_AmplVar
+		temp_neg_stepVar=IV_stepVar
+		temp_neg_Plength=IV_PlengthVar
+	
+	elseif(type==5||type==6&&IV_AmplVar>0&&IV_stepVar>0&&IV_TlengthVar>0)
+		temp_SWrate=2*(IV_AmplVar_neg+IV_AmplVar)/IV_TlengthVar
+		
+		//IV_PlengthVar=IV_TlengthVar/4/IV_NplhVar
+		if(mod(IV_AmplVar,IV_stepVar)==0)
+			IV_NplhVar=IV_AmplVar/IV_stepVar
+		else
+			IV_NplhVar=ceil(IV_AmplVar/IV_stepVar)
+			IV_stepVar=IV_AmplVar/IV_NplhVar
+			print "WARNING: IV step height is changed!"
+		endif
+		temp_neg_Ampl=IV_AmplVar_neg
+		IV_PlengthVar=IV_stepVar/temp_SWrate
+		temp_neg_stepVar=IV_AmplVar_neg/IV_NplhVar
+		temp_neg_Plength=temp_neg_stepVar/temp_SWrate
+		
+	endif
+	
+	if(IV_stepVar>0&&IV_NplhVar>0&&IV_PlengthVar>0&&IV_AmplVar>0&&IV_TlengthVar>0) //azt nézi meg, hogy 0-tól nagyobbak-e a paraméterek
+	
+		Variable i=0
+		
+		NumOfSegments=4*IV_NplhVar+1
+		Redimension/N=(NumOfSegments,-1) SegmentsData
+		SegmentsData=0
+		
+		SegmentsData[0,2*IV_NplhVar-1][0]=IV_PlengthVar
+		SegmentsData[2*IV_NplhVar,4*IV_NplhVar-1][0]=temp_neg_Plength
+		for(i=0;i<IV_NplhVar;i=i+1)
+			SegmentsData[i][1]=IV_stepVar*i
+			SegmentsData[i][2]=IV_stepVar*i
+			SegmentsData[i+IV_NplhVar][1]=IV_AmplVar-IV_stepVar*i
+			SegmentsData[i+IV_NplhVar][2]=IV_AmplVar-IV_stepVar*i
+			SegmentsData[i+2*IV_NplhVar][1]=-temp_neg_stepVar*i
+			SegmentsData[i+2*IV_NplhVar][2]=-temp_neg_stepVar*i
+			SegmentsData[i+3*IV_NplhVar][1]=-temp_neg_Ampl+temp_neg_stepVar*i
+			SegmentsData[i+3*IV_NplhVar][2]=-temp_neg_Ampl+temp_neg_stepVar*i
+		endfor
+		
+		if(type==6)
+			temp_SWrate=2*(temp_neg_Ampl+IV_AmplVar)/IV_TlengthVar
+			InsertPoints 0,4,SegmentsData
+			NumOfSegments+=4
+			SegmentsData[0][1]=0
+			SegmentsData[0][2]=IV_AmplVar
+			SegmentsData[1][1]=IV_AmplVar
+			SegmentsData[1][2]=0
+			SegmentsData[2][1]=0
+			SegmentsData[2][2]=-temp_neg_Ampl
+			SegmentsData[3][1]=-temp_neg_Ampl
+			SegmentsData[3][2]=0
+			SegmentsData[0][0]=IV_AmplVar/temp_SWrate
+			SegmentsData[1][0]=IV_AmplVar/temp_SWrate
+			SegmentsData[2][0]=temp_neg_Ampl/temp_SWrate
+			SegmentsData[3][0]=temp_neg_Ampl/temp_SWrate
+		endif
+		
+		
+		SegmentsData[][1]+=temp_offset
+		SegmentsData[][2]+=temp_offset
+		IV_AmplVar+=temp_offset
+		Variable k=0
+		if(type==4)
+			if(temp_offset<0)
+				do
+					if(SegmentsData[0][1]<0) //Azért kell, mert a do while akkor is lefut egyszer, ha a feltétel nem teljesül, ezért le kell védeni, hogy ha nem telj a feltétel az elsőre, akkor ne fusson le
+						Redimension/N=(DimSize(SegmentsData,0)+1,-1) SegmentsData
+						SegmentsData[DimSize(SegmentsData,0)-2][0]=SegmentsData[0][0]
+						SegmentsData[DimSize(SegmentsData,0)-2][1]=SegmentsData[0][1]
+						SegmentsData[DimSize(SegmentsData,0)-2][2]=SegmentsData[0][2]
+						DeletePoints 0,1,SegmentsData
+						k=k+1
+					endif
+				while(SegmentsData[0][1]<0)
+			endif
+			if(temp_offset>0)
+				do
+					if(SegmentsData[DimSize(SegmentsData,0)-2][1]>0) //Azért kell, mert a do while akkor is lefut egyszer, ha a feltétel nem teljesül, ezért le kell védeni, hogy ha nem telj a feltétel az elsőre, akkor ne fusson le
+						InsertPoints 0,1,SegmentsData
+						SegmentsData[0][0]=SegmentsData[DimSize(SegmentsData,0)-2][0]
+						SegmentsData[0][1]=SegmentsData[DimSize(SegmentsData,0)-2][1]
+						SegmentsData[0][2]=SegmentsData[DimSize(SegmentsData,0)-2][2]
+						DeletePoints DimSize(SegmentsData,0)-2,1,SegmentsData
+						k=k+1
+					endif
+				while(SegmentsData[DimSize(SegmentsData,0)-2][1]>0)
+				SegmentsData[DimSize(SegmentsData,0)-1][0]=0
+				SegmentsData[DimSize(SegmentsData,0)-1][1]=0
+				SegmentsData[DimSize(SegmentsData,0)-1][2]=0
+			endif
+			InsertPoints 2*(IV_NplhVar+sign(temp_offset)*k)+1,1,SegmentsData
+			NumOfSegments+=1
+			SegmentsData[2*(IV_NplhVar+sign(temp_offset)*k)+1][0]=SegmentsData[1][0]
+			SegmentsData[2*(IV_NplhVar+sign(temp_offset)*k)+1][1]=0
+			SegmentsData[2*(IV_NplhVar+sign(temp_offset)*k)+1][2]=0
+			InsertPoints 0,1,SegmentsData
+			NumOfSegments+=1
+			SegmentsData[0][0]=SegmentsData[1][0]
+			SegmentsData[0][1]=0
+			SegmentsData[0][2]=0
+		endif
+		Slider SegSelector limits= {0,NumOfSegments-1,1}
+	
+	endif //annak az ifnek a vége, ami azt nézi meg, hogy 0-tól nagyobbak-e a paraméterek
+End
+
+
+Function calcPulse(type)
+	Variable type
+	Wave SegmentsData=root:Signal_variables:SegmentsData
+	NVar NumOfSegments=root:Signal_variables:NumOfSegments
+	NVar CurrSegment=root:Signal_variables:CurrSegment
+	
+	NVar IV_AmplVar=root:Signal_variables:IV_AmplVar
+	NVar IV_AmplVar_neg=root:Signal_variables:IV_AmplVar_neg
+	NVar IV_NplhVar=root:Signal_variables:IV_NplhVar
+	NVar IV_PlengthVar=root:Signal_variables:IV_PlengthVar
+	NVar IV_stepVar=root:Signal_variables:IV_stepVar
+	NVar IV_TlengthVar=root:Signal_variables:IV_TlengthVar
+	
+	Variable temp_offset=0
+	Variable temp_neg_Plength=0
+	Variable temp_neg_stepVar=0
+	Variable temp_neg_Ampl=0
+	Variable temp_SWrate=0
+		
+	if(IV_stepVar>0&&IV_NplhVar>0&&IV_PlengthVar>0&&IV_AmplVar>0&&IV_TlengthVar>0) //azt nézi meg, hogy 0-tól nagyobbak-e a paraméterek
+	
+		Variable i=0	
+		NumOfSegments=4*IV_NplhVar+1
+		Redimension/N=(NumOfSegments,-1) SegmentsData
+		SegmentsData=0
+		
+		SegmentsData[0,2*IV_NplhVar-1][0]=IV_PlengthVar
+		SegmentsData[2*IV_NplhVar,4*IV_NplhVar-1][0]=temp_neg_Plength
+		for(i=0;i<IV_NplhVar;i=i+1)
+			SegmentsData[i][1]=IV_stepVar*i
+			SegmentsData[i][2]=IV_stepVar*i
+			SegmentsData[i+IV_NplhVar][1]=IV_AmplVar-IV_stepVar*i
+			SegmentsData[i+IV_NplhVar][2]=IV_AmplVar-IV_stepVar*i
+			SegmentsData[i+2*IV_NplhVar][1]=-temp_neg_stepVar*i
+			SegmentsData[i+2*IV_NplhVar][2]=-temp_neg_stepVar*i
+			SegmentsData[i+3*IV_NplhVar][1]=-temp_neg_Ampl+temp_neg_stepVar*i
+			SegmentsData[i+3*IV_NplhVar][2]=-temp_neg_Ampl+temp_neg_stepVar*i
+		endfor
+		
+		if(type==6)
+			temp_SWrate=2*(temp_neg_Ampl+IV_AmplVar)/IV_TlengthVar
+			InsertPoints 0,4,SegmentsData
+			NumOfSegments+=4
+			SegmentsData[0][1]=0
+			SegmentsData[0][2]=IV_AmplVar
+			SegmentsData[1][1]=IV_AmplVar
+			SegmentsData[1][2]=0
+			SegmentsData[2][1]=0
+			SegmentsData[2][2]=-temp_neg_Ampl
+			SegmentsData[3][1]=-temp_neg_Ampl
+			SegmentsData[3][2]=0
+			SegmentsData[0][0]=IV_AmplVar/temp_SWrate
+			SegmentsData[1][0]=IV_AmplVar/temp_SWrate
+			SegmentsData[2][0]=temp_neg_Ampl/temp_SWrate
+			SegmentsData[3][0]=temp_neg_Ampl/temp_SWrate
+		endif
+		
+		SegmentsData[][1]+=temp_offset
+		SegmentsData[][2]+=temp_offset
+		IV_AmplVar+=temp_offset
+		Variable k=0
+		
+		Slider SegSelector limits= {0,NumOfSegments-1,1}
+	
+	endif //annak az ifnek a vége, ami azt nézi meg, hogy 0-tól nagyobbak-e a paraméterek
+End
+
+
+Function RepeateSignal(NumofRep)
+	Variable NumofRep
+	Wave SegmentsData=root:Signal_variables:SegmentsData
+	NVar NumOfSegments=root:Signal_variables:NumOfSegments
+	NVar CurrSegment=root:Signal_variables:CurrSegment
+	
+	Variable temp_oldNum=0
+	
+	Variable j=0,i=0
+	temp_oldNum=(NumOfSegments-1)
+	NumOfSegments=(NumOfSegments-1)*NumofRep+1
+	Redimension/N=(NumOfSegments,-1) SegmentsData
+	
+	for(i=1;i<NumofRep;i=i+1)
+		for(j=0;j<temp_oldNum;j=j+1)
+			SegmentsData[i*temp_oldNum+j][0]=SegmentsData[j][0]
+			SegmentsData[i*temp_oldNum+j][1]=SegmentsData[j][1]
+			SegmentsData[i*temp_oldNum+j][2]=SegmentsData[j][2]
+		endfor
+	endfor	
+	
+	Slider SegSelector limits= {0,NumOfSegments-1,1}
+End
+
+
+Function DivideSegm(NumofSub)
+	Variable NumofSub
+	Wave SegmentsData=root:Signal_variables:SegmentsData
+	NVar NumOfSegments=root:Signal_variables:NumOfSegments
+	NVar CurrSegment=root:Signal_variables:CurrSegment
+	
+	Variable temp_oldNum=0
+	
+	Variable i=0
+	temp_oldNum=(NumOfSegments-1)
+	
+	InsertPoints CurrSegment+1,NumofSub-1,SegmentsData
+	NumOfSegments=DimSize(SegmentsData,0)
+	SegmentsData[CurrSegment][0]=SegmentsData[CurrSegment][0]/NumofSub
+	for(i=1;i<NumofSub;i=i+1)
+		SegmentsData[i+CurrSegment][0]=SegmentsData[CurrSegment][0]
+		SegmentsData[i+CurrSegment][1]=SegmentsData[CurrSegment][1]
+		SegmentsData[i+CurrSegment][2]=SegmentsData[CurrSegment][2]
+	endfor
+	
+	Slider SegSelector limits= {0,NumOfSegments-1,1}
+End
+
+
+Function PreDefMenu(pa) : PopupMenuControl
+	STRUCT WMPopupAction &pa
+	NVar IV_AmplVar=root:Signal_variables:IV_AmplVar
+	NVar IV_AmplVar_neg=root:Signal_variables:IV_AmplVar_neg
+	NVar IV_NplhVar=root:Signal_variables:IV_NplhVar
+	NVar IV_PlengthVar=root:Signal_variables:IV_PlengthVar
+	NVar IV_stepVar=root:Signal_variables:IV_stepVar
+	NVar IV_TlengthVar=root:Signal_variables:IV_TlengthVar
+	switch( pa.eventCode )
+		case 2: // mouse up
+			Variable popNum = pa.popNum
+			String popStr = pa.popStr
+			
+			switch(popNum)
+				case 1:			
+					SetVariable IV_Tlength noedit=1
+					SetVariable IV_Tlength valueBackColor=(65535,54607,32768)
+					//IV_TlengthVar=0
+					
+					SetVariable IV_Plength noedit=0
+					SetVariable IV_Plength valueBackColor=(49151,65535,49151)
+					//IV_PlengthVar=0
+					
+					SetVariable IV_Nplh noedit=0
+					SetVariable IV_Nplh valueBackColor=(49151,65535,49151)
+					//IV_NplhVar=0
+					
+					SetVariable IV_Ampl noedit=1
+					SetVariable IV_Ampl valueBackColor=(65535,54607,32768)
+					//IV_AmplVar=0
+					
+					SetVariable IV_step noedit=0
+					SetVariable IV_step valueBackColor=(49151,65535,49151)
+					//IV_stepVar=0
+					
+					SetVariable IV_Ampl_neg disable=1
+					
+					break
+				case 2:
+					SetVariable IV_Tlength noedit=0
+					SetVariable IV_Tlength valueBackColor=(49151,65535,49151)
+					//IV_TlengthVar=0
+					
+					SetVariable IV_Plength noedit=1
+					SetVariable IV_Plength valueBackColor=(65535,54607,32768)
+					//IV_PlengthVar=0
+					
+					SetVariable IV_Nplh noedit=0
+					SetVariable IV_Nplh valueBackColor=(49151,65535,49151)
+					//IV_NplhVar=0
+					
+					SetVariable IV_Ampl noedit=0
+					SetVariable IV_Ampl valueBackColor=(49151,65535,49151)
+					//IV_AmplVar=0
+					
+					SetVariable IV_step noedit=1
+					SetVariable IV_step valueBackColor=(65535,54607,32768)
+					//IV_stepVar=0
+					
+					SetVariable IV_Ampl_neg disable=1
+					
+					break
+				case 3:
+					SetVariable IV_Tlength noedit=0
+					SetVariable IV_Tlength valueBackColor=(49151,65535,49151)
+					//IV_TlengthVar=0
+					
+					SetVariable IV_Plength noedit=1
+					SetVariable IV_Plength valueBackColor=(65535,54607,32768)
+					//IV_PlengthVar=0
+					
+					SetVariable IV_Nplh noedit=1
+					SetVariable IV_Nplh valueBackColor=(65535,54607,32768)
+					//IV_NplhVar=0
+					
+					SetVariable IV_Ampl noedit=0
+					SetVariable IV_Ampl valueBackColor=(49151,65535,49151)
+					//IV_AmplVar=0
+					
+					SetVariable IV_step noedit=0
+					SetVariable IV_step valueBackColor=(49151,65535,49151)
+					//IV_stepVar=0
+					
+					SetVariable IV_Ampl_neg disable=1
+					
+					break
+				case 4:
+					SetVariable IV_Tlength noedit=0
+					SetVariable IV_Tlength valueBackColor=(49151,65535,49151)
+					//IV_TlengthVar=0
+					
+					SetVariable IV_Plength noedit=1
+					SetVariable IV_Plength valueBackColor=(65535,54607,32768)
+					//IV_PlengthVar=0
+					
+					SetVariable IV_Nplh noedit=1
+					SetVariable IV_Nplh valueBackColor=(65535,54607,32768)
+					//IV_NplhVar=0
+					
+					SetVariable IV_Ampl noedit=0
+					SetVariable IV_Ampl valueBackColor=(49151,65535,49151)
+					//IV_AmplVar=0
+					
+					SetVariable IV_step noedit=0
+					SetVariable IV_step valueBackColor=(49151,65535,49151)
+					//IV_stepVar=0
+					
+					SetVariable IV_Ampl_neg disable=0
+					SetVariable IV_Ampl noedit=0
+					SetVariable IV_Ampl valueBackColor=(49151,65535,49151)
+					//IV_AmplVar_neg=0
+					
+					break
+				case 5:
+					SetVariable IV_Tlength noedit=0
+					SetVariable IV_Tlength valueBackColor=(49151,65535,49151)
+					//IV_TlengthVar=0
+					
+					SetVariable IV_Plength noedit=1
+					SetVariable IV_Plength valueBackColor=(65535,54607,32768)
+					//IV_PlengthVar=0
+					
+					SetVariable IV_Nplh noedit=1
+					SetVariable IV_Nplh valueBackColor=(65535,54607,32768)
+					//IV_NplhVar=0
+					
+					SetVariable IV_Ampl noedit=0
+					SetVariable IV_Ampl valueBackColor=(49151,65535,49151)
+					//IV_AmplVar=0
+					
+					SetVariable IV_step noedit=0
+					SetVariable IV_step valueBackColor=(49151,65535,49151)
+					//IV_stepVar=0
+					
+					SetVariable IV_Ampl_neg disable=0
+					SetVariable IV_Ampl noedit=0
+					SetVariable IV_Ampl valueBackColor=(49151,65535,49151)
+					//IV_AmplVar_neg=0
+					
+					break
+				case 6:		
+					SetVariable IV_Tlength noedit=0
+					SetVariable IV_Tlength valueBackColor=(49151,65535,49151)
+					//IV_TlengthVar=0
+					
+					SetVariable IV_Plength noedit=1
+					SetVariable IV_Plength valueBackColor=(65535,54607,32768)
+					//IV_PlengthVar=0
+					
+					SetVariable IV_Nplh noedit=1
+					SetVariable IV_Nplh valueBackColor=(65535,54607,32768)
+					//IV_NplhVar=0
+					
+					SetVariable IV_Ampl noedit=0
+					SetVariable IV_Ampl valueBackColor=(49151,65535,49151)
+					//IV_AmplVar=0
+					
+					SetVariable IV_step noedit=0
+					SetVariable IV_step valueBackColor=(49151,65535,49151)
+					//IV_stepVar=0
+					
+					SetVariable IV_Ampl_neg disable=0
+					SetVariable IV_Ampl noedit=0
+					SetVariable IV_Ampl valueBackColor=(49151,65535,49151)
+					//IV_AmplVar_neg=0
+					
+					break
+			endswitch
+			break
+		case -1: // control being killed
+			break
+	endswitch
+
+	return 0
+End
+
+
+Function GenPatternProc(ba) : ButtonControl
+	STRUCT WMButtonAction &ba
+	NVar CurrSegment=root:Signal_variables:CurrSegment
+	NVar NumOfSegments=root:Signal_variables:NumOfSegments
+	switch( ba.eventCode )
+		case 2: // mouse up
+			ControlInfo PreDefSel
+			calcIV(V_value)
+			ControlInfo Invert
+			if(V_Value==1)
+				Wave SegmentsData=root:Signal_variables:SegmentsData
+				SegmentsData[][1]=-SegmentsData[p][1]
+				SegmentsData[][2]=-SegmentsData[p][2]
+			endif
+			
+			ControlInfo HalfIV_chbox
+			if(V_Value==1)
+				Wave SegmentsData=root:Signal_variables:SegmentsData		
+				DeletePoints (NumOfSegments-1)/2+1,(NumOfSegments-1)/2-1, SegmentsData
+				NumOfSegments=DimSize(SegmentsData,0)
+			endif
+			
+			generate_signal()
+			CurrSegment=0
+			Slider SegSelector limits= {0,NumOfSegments-1,1}
+			Slider SegSelector value=CurrSegment
+			MakePlot()
+			break
+		case -1: // control being killed
+			break
+	endswitch
+
+	return 0
+End
+
+
+Function SignRepButton(ba) : ButtonControl
+	STRUCT WMButtonAction &ba
+	NVar CurrSegment=root:Signal_variables:CurrSegment
+	NVar NumOfSegments=root:Signal_variables:NumOfSegments
+	switch( ba.eventCode )
+		case 2: // mouse up
+			ControlInfo NumRep
+			RepeateSignal(V_value)
+			generate_signal()
+			CurrSegment=0
+			Slider SegSelector limits= {0,NumOfSegments-1,1}
+			Slider SegSelector value=CurrSegment
+			MakePlot()
+			break
+		case -1: // control being killed
+			break
+	endswitch
+
+	return 0
+End
+
+
+Function DivSegmButton(ba) : ButtonControl
+	STRUCT WMButtonAction &ba
+	NVar CurrSegment=root:Signal_variables:CurrSegment
+	NVar NumOfSegments=root:Signal_variables:NumOfSegments
+	switch( ba.eventCode )
+		case 2: // mouse up
+			ControlInfo NumSubSegm
+			DivideSEgm(V_value)
+			generate_signal()
+			//CurrSegment=0
+			Slider SegSelector limits= {0,NumOfSegments-1,1}
+			Slider SegSelector value=CurrSegment
+			MakePlot()
+			break
+		case -1: // control being killed
+			break
+	endswitch
+
+	return 0
+End
+
+
+Function LoadSegProc(ba) : ButtonControl
+	STRUCT WMButtonAction &ba
+	SetDataFolder root:
+	Wave load_temp0=root:load_temp0
+	switch( ba.eventCode )
+		case 2: // mouse up
+			LoadWave/G/D/N=load_temp/O
+			if(V_flag!=0)
+				Duplicate/O root:load_temp0,root:Signal_variables:loaded_signal
+				Wave loaded_signal=root:Signal_variables:loaded_signal
+				KillWaves load_temp0
+				LoadSegmDatas(loaded_signal)
+			endif
+			break
+		case -1: // control being killed
+			break
+	endswitch
+
+	return 0
+End
+
+
+Function LoadSegmDatas(loaded_signal)
+	Wave loaded_signal
+	NVar length=root:Signal_variables:length
+	Wave SegmentsData=root:Signal_variables:SegmentsData
+	NVar NumOfSegments=root:Signal_variables:NumOfSegments
+	NVar CurrSegment=root:Signal_variables:CurrSegment
+			
+	length=loaded_signal[0]*1000
+	NumOfSegments=loaded_signal[1]+1
+	CurrSegment=0
+	Redimension/N=(NumOfSegments,-1) SegmentsData
+	Variable i=0
+	SegmentsData[i][1]=loaded_signal[2+3*i+1]*1000
+	SegmentsData[i][2]=loaded_signal[2+3*i+2]*1000
+	SegmentsData[i][0]=loaded_signal[2+3*i]*length/65535
+	//SegmentsData[i][0]=round((loaded_signal[2+3*i])*length/65535)
+	for(i=1;i<NumOfSegments-1;i=i+1)
+		SegmentsData[i][1]=loaded_signal[2+3*i+1]*1000
+		SegmentsData[i][2]=loaded_signal[2+3*i+2]*1000
+		SegmentsData[i][0]=(loaded_signal[2+3*i]-loaded_signal[2+3*(i-1)])*length/65535
+		//SegmentsData[i][0]=round((loaded_signal[2+3*i]-loaded_signal[2+3*(i-1)])*length/65535)
+	endfor
+	SegmentsData[NumOfSegments-1][1]=0
+	SegmentsData[NumOfSegments-1][2]=0
+	SegmentsData[NumOfSegments-1][0]=0
+		
+	SetVariable CurrSegLength value=_NUM:0
+	SetVariable CurrSegLength  value=_NUM:SegmentsData[CurrSegment][0]
+	SetVariable CurrSegVstart value=_NUM:0
+	SetVariable CurrSegVstart value=_NUM:SegmentsData[CurrSegment][1]
+	SetVariable CurrSegVend value=_NUM:0
+	SetVariable CurrSegVend value=_NUM:SegmentsData[CurrSegment][2]
+	Slider SegSelector limits= {0,NumOfSegments-1,1}
+	Slider SegSelector value=CurrSegment
+	generate_signal()
+	if(CurrSegment>0)
+		ValDisplay PrevSegLength value=0
+		ValDisplay PrevSegLength value=_NUM:SegmentsData[CurrSegment-1][0]
+		ValDisplay PrevSegVstart value=0
+		ValDisplay PrevSegVstart value=_NUM:SegmentsData[CurrSegment-1][1]
+		ValDisplay PrevSegVend value=0
+		ValDisplay PrevSegVend value=_NUM:SegmentsData[CurrSegment-1][2]
+	else
+		ValDisplay PrevSegLength value=0
+		ValDisplay PrevSegVstart value=0
+		ValDisplay PrevSegVend value=0
+	endif
+	if(CurrSegment<NumOfSegments-1)
+		ValDisplay NextSegLength value=0
+		ValDisplay NextSegLength value=_NUM:SegmentsData[CurrSegment+1][0]
+		ValDisplay NextSegVstart value=0
+		ValDisplay NextSegVstart value=_NUM:SegmentsData[CurrSegment+1][1]
+		ValDisplay NextSegVend value=0
+		ValDisplay NextSegVend value=_NUM:SegmentsData[CurrSegment+1][2]
+	else
+		ValDisplay NextSegLength value=0
+		ValDisplay NextSegVstart value=0
+		ValDisplay NextSegVend value=0
+	endif
+End
+
+
+Function LoadMeasProc(ba) : ButtonControl
+	STRUCT WMButtonAction &ba
+
+	switch( ba.eventCode )
+		case 2: // mouse up
+			Auto_Eval_BIN_Multiple(0)
+			break
+		case -1: // control being killed
+			break
+	endswitch
+
+	return 0
+End
+
+
+Function ClearSegm()
+	Wave SegmentsData=root:Signal_variables:SegmentsData
+	NVar NumOfSegments=root:Signal_variables:NumOfSegments
+	NVar CurrSegment=root:Signal_variables:CurrSegment
+
+	DeletePoints 1,1e10, SegmentsData
+	SegmentsData=0
+	NumOfSegments=1
+	CurrSegment=0
+	Slider SegSelector limits= {0,0,1}
+	Slider SegSelector value=CurrSegment
+		
+	SetVariable CurrSegLength value=_NUM:0
+	SetVariable CurrSegVstart value=_NUM:0
+	SetVariable CurrSegVend value=_NUM:0
+	ValDisplay PrevSegLength value=0
+	ValDisplay PrevSegVstart value=0
+	ValDisplay PrevSegVend value=0
+	ValDisplay PrevSegLength value=0
+	ValDisplay PrevSegVstart value=0
+	ValDisplay PrevSegVend value=0
+	ValDisplay NextSegLength value=0
+	ValDisplay NextSegVstart value=0
+	ValDisplay NextSegVend value=0
+	ValDisplay NextSegLength value=0
+	ValDisplay NextSegVstart value=0
+	ValDisplay NextSegVend value=0
+	
+	
+	Wave G0left=root:Plot_variables:G0left
+	Wave G0bottom=root:Plot_variables:G0bottom
+	Wave G0left2=root:Plot_variables:G0left2
+	Wave G0bottom2=root:Plot_variables:G0bottom2
+	Redimension /N=(1,-1) G0left
+	Redimension /N=(1,-1) G0bottom
+	Redimension /N=(1,-1) G0left2
+	Redimension /N=(1,-1) G0bottom2
+	G0left=0
+	G0left2=0
+	G0bottom=0
+	G0bottom2=0
+	
+	generate_signal()
+
+End
+
+
+Function ClrMeasProc(ba) : ButtonControl
+	STRUCT WMButtonAction &ba
+
+	switch( ba.eventCode )
+		case 2: // mouse up
+			//ClearSegm()
+			ClearMeas()
+			MakePlot()
+			break
+		case -1: // control being killed
+			break
+	endswitch
+
+	return 0
+End
+
+
+Function ListBoxProc(lba) : ListBoxControl
+	STRUCT WMListboxAction &lba
+	Wave /T In_data_names=root:Program_variables:In_data_names
+	NVAR data_sel=root:Program_Variables:data_sel
+	Variable row = lba.row
+	Variable col = lba.col
+	WAVE/T/Z listWave = lba.listWave
+	WAVE/Z selWave = lba.selWave
+	Variable temp_bool=1
+	switch( lba.eventCode )
+		case -1: // control being killed
+			break
+		case 1: // mouse down
+			if(data_sel==(DimSize(In_data_names,0))-1)
+				DoAlert /T="Warning: Exit signal mode" 1, "Would you like to exit from signal mode? All modification will be discarderd!"
+				temp_bool=V_flag
+			endif
+			if(temp_bool==1)
+				ControlInfo FileList
+				data_sel=V_Value
+				LoadActArb()
+				MakePlot()
+			else
+				ListBox FileList selRow=data_sel
+			endif
+			break
+		case 3: // double click
+			break
+		case 4: // cell selection
+		case 5: // cell selection plus shift key
+			break
+		case 6: // begin edit
+			break
+		case 7: // finish edit
+			break
+		case 13: // checkbox clicked (Igor 6.2 or later)
+			break
+	endswitch
+
+	return 0
+End
+
+
+Function G1selectMenu(pa) : PopupMenuControl
+	STRUCT WMPopupAction &pa
+
+	switch( pa.eventCode )
+		case 2: // mouse up
+			Variable popNum = pa.popNum
+			String popStr = pa.popStr
+			MakePlot()
+			break
+		case -1: // control being killed
+			break
+	endswitch
+
+	return 0
+End
+
+
+Function G0selectMenu(pa) : PopupMenuControl
+	STRUCT WMPopupAction &pa
+
+	switch( pa.eventCode )
+		case 2: // mouse up
+			Variable popNum = pa.popNum
+			String popStr = pa.popStr
+			MakePlot()
+			break
+		case -1: // control being killed
+			break
+	endswitch
+
+	return 0
+End
+
+
+Function CalcPSDProc(ba) : ButtonControl
+	STRUCT WMButtonAction &ba
+
+	switch( ba.eventCode )
+		case 2: // mouse up
+			LoadActArb()
+			CalcSegmPoints(0)
+			CalculatePSDs()
+			MakePlot()
+			break
+		case -1: // control being killed
+			break
+	endswitch
+
+	return 0
+End
+
+
+Function ReplSignButton(ba) : ButtonControl
+	STRUCT WMButtonAction &ba
+
+	switch( ba.eventCode )
+		case 2: // mouse up
+			ReplaceMeasSignal()
+			CalcSegmPoints(0)
+			CalculatePSDs()
+			MakePlot()
+			break
+		case -1: // control being killed
+			break
+	endswitch
+
+	return 0
+End
+
+
+Function SavePSDProc(ba) : ButtonControl
+	STRUCT WMButtonAction &ba
+
+	switch( ba.eventCode )
+		case 2: // mouse up
+			SavePSDs()
+			break
+		case -1: // control being killed
+			break
+	endswitch
+
+	return 0
+End
+
+
+Function CompOffsetProc(ba) : ButtonControl
+	STRUCT WMButtonAction &ba
+
+	switch( ba.eventCode )
+		case 2: // mouse up
+			CompOFFsetFun()
+			MakePlot()
+			break
+		case -1: // control being killed
+			break
+	endswitch
+
+	return 0
+End
+
+Function CutStopProc(sva) : SetVariableControl
+	STRUCT WMSetVariableAction &sva
+
+	switch( sva.eventCode )
+		case 1: // mouse up
+		case 2: // Enter key
+		case 3: // Live update
+			Variable dval = sva.dval
+			if(dval<1)
+				DoAlert /T="Warning: CutStop too small!" 0, "CutStop under 1 ms is not safe to use due to number mismatch of measured versus saved datapoints! "
+			endif
+			break
+		case -1: // control being killed
+			break
+	endswitch
+
+	return 0
+End
+
+Function CutDataProc(ba) : ButtonControl
+	STRUCT WMButtonAction &ba
+
+	switch( ba.eventCode )
+		case 2: // mouse up
+			CutDataFun()
+			CalculatePSDs()
+			MakePlot()
+			break
+		case -1: // control being killed
+			break
+	endswitch
+
+	return 0
+End
+
+
+Function StepArrow(s)
+	STRUCT WMWinHookStruct &s
+	NVar NumOfSegments=root:Signal_variables:NumOfSegments
+	Variable hookResult = 0	// 0 if we do not handle event, 1 if we handle it.
+	Variable curval=0
+	switch(s.eventCode)
+		case 11:					// Keyboard event
+			switch (s.keycode)
+				case 28:
+					//Print "Left arrow key pressed."
+					hookResult = 1
+					ControlInfo SegSelector
+					curval=V_value-1
+					if(curval>=0)
+						Slider SegSelector value=curval
+						StepSegm(curval)
+					endif
+					break
+				case 29:
+					//Print "Right arrow key pressed."
+					hookResult = 1
+					ControlInfo SegSelector
+					curval=V_value+1
+					if(curval<NumOfSegments)
+						Slider SegSelector value=curval
+						StepSegm(curval)
+					endif
+					break
+				case 30:
+					//Print "Up arrow key pressed."
+					hookResult = 1
+					break
+				case 31:
+					//Print "Down arrow key pressed."
+					hookResult = 1
+					break			
+				default:
+					// The keyText field requires Igor Pro 7 or later. See Keyboard Events.
+					//Printf "Key pressed: %s\r", s.keyText
+					break			
+			endswitch
+			break
+	endswitch
+
+	return hookResult	// If non-zero, we handled event and Igor will ignore it.
+End
+
+
+Function StepSegm(curval)
+	Variable curval
+	
+	NVar CurrSegment=root:Signal_variables:CurrSegment
+	Wave SegmentsData=root:Signal_variables:SegmentsData
+	NVar NumOfSegments=root:Signal_variables:NumOfSegments
+
+	CurrSegment=curval
+	if(SegmentsData[CurrSegment][0]>0) //Csak akkor írja be, ha nagyobb 0, ha nem, akkor hagyja az előzőt. Ez a kézi megadáskor hasznos
+		SetVariable CurrSegLength value=_NUM:0
+		SetVariable CurrSegLength  value=_NUM:SegmentsData[CurrSegment][0]
+	endif
+	SetVariable CurrSegVstart value=_NUM:0
+	SetVariable CurrSegVstart value=_NUM:SegmentsData[CurrSegment][1]
+	SetVariable CurrSegVend value=_NUM:0
+	SetVariable CurrSegVend value=_NUM:SegmentsData[CurrSegment][2]
+	//generate_signal()
+	MakePlot()
+	if(CurrSegment>0)
+		ValDisplay PrevSegLength value=0
+		ValDisplay PrevSegLength value=_NUM:SegmentsData[CurrSegment-1][0]
+		ValDisplay PrevSegVstart value=0
+		ValDisplay PrevSegVstart value=_NUM:SegmentsData[CurrSegment-1][1]
+		ValDisplay PrevSegVend value=0
+		ValDisplay PrevSegVend value=_NUM:SegmentsData[CurrSegment-1][2]
+	else
+		ValDisplay PrevSegLength value=0
+		ValDisplay PrevSegVstart value=0
+		ValDisplay PrevSegVend value=0
+	endif
+	if(CurrSegment<NumOfSegments-1)
+		ValDisplay NextSegLength value=0
+		ValDisplay NextSegLength value=_NUM:SegmentsData[CurrSegment+1][0]
+		ValDisplay NextSegVstart value=0
+		ValDisplay NextSegVstart value=_NUM:SegmentsData[CurrSegment+1][1]
+		ValDisplay NextSegVend value=0
+		ValDisplay NextSegVend value=_NUM:SegmentsData[CurrSegment+1][2]
+	else
+		ValDisplay NextSegLength value=0
+		ValDisplay NextSegVstart value=0
+		ValDisplay NextSegVend value=0
+	endif
+
+End
+
+
+
+Function TimingCorr(DelNum)
+	Variable DelNum  //15 seems to be universaly working
+	
+	
+	Wave /T In_data_names=root:Program_variables:In_data_names
+	//Kiválasztja az adott mérést
+	//Az utolsó sor üres, ez védi le, hogy ekkor ne legyen ábrázolás. Továbbá ha nincs betöltve mért adat, akkor sem fut le. Az if vége a függvény végén van.
+	NVAR data_sel=root:Program_variables:data_sel
+	if(data_sel!=DimSize(In_data_names,0)-1)
+		String In_data=In_data_names[data_sel]
+		Wave res_cont=root:Measured_data:$(In_data+"_R")
+		Wave drive_cont=root:Measured_data:$(In_data+"_V")
+		Wave curr_cont=root:Measured_data:$(In_data+"_I")
+		Wave Rser=root:Measured_data:Aux_data:RserMeas
+		Variable Rserial=Rser[data_sel]
+	endif
+	
+	Variable position = DimSize(curr_cont, 0)-DelNum
+	DeletePoints 0,DelNum, curr_cont
+	DeletePoints position,DelNum, drive_cont
+	
+	//res should have same length
+	Make/O/N=(DimSize(curr_cont, 0)) root:Measured_data:$(In_data+"_R") = 0
+	//corrected calculation
+	res_cont=drive_cont/1000/(curr_cont)-Rserial
+	
+	//avg calc is not updated!
+	
+End
+
+Function TimingCorr_All(DelNum)
+	Variable DelNum  //15
+	
+	
+	Wave /T In_data_names=root:Program_variables:In_data_names
+	
+	Variable data_sel
+	
+	for(data_sel=0;data_sel<23;data_sel+=1)
+		String In_data=In_data_names[data_sel]
+		Wave res_cont=root:Measured_data:$(In_data+"_R")
+		Wave drive_cont=root:Measured_data:$(In_data+"_V")
+		Wave curr_cont=root:Measured_data:$(In_data+"_I")
+		Wave Rser=root:Measured_data:Aux_data:RserMeas
+		Variable Rserial=Rser[data_sel]
+		
+		
+		Variable position = DimSize(curr_cont, 0)-DelNum
+		DeletePoints 0,DelNum, curr_cont
+		DeletePoints position,DelNum, drive_cont
+		
+		//res should have same length
+		Make/O/N=(DimSize(curr_cont, 0)) root:Measured_data:$(In_data+"_R") = 0
+		//corrected calculation
+		res_cont=drive_cont/1000/(curr_cont)-Rserial
+		
+		//avg calc
+	endfor
+End
+
+
+Function PlotIV_All()
+	
+	Wave /T In_data_names=root:Program_variables:In_data_names
+	
+	Variable data_sel
+	Display
+	for(data_sel=0;data_sel<50;data_sel+=1)
+		String In_data=In_data_names[data_sel]
+		Wave res_cont=root:Measured_data:$(In_data+"_R")
+		Wave drive_cont=root:Measured_data:$(In_data+"_V")
+		Wave curr_cont=root:Measured_data:$(In_data+"_I")
+		Wave Rser=root:Measured_data:Aux_data:RserMeas
+		Variable Rserial=Rser[data_sel]
+		
+		AppendToGraph curr_cont vs drive_cont
+		
+	endfor
+End
+
+Function PlotAvgIV_All()
+	
+	Wave /T In_data_names=root:Program_variables:In_data_names
+	
+	Variable data_sel
+	Display
+	for(data_sel=0;data_sel<60;data_sel+=1)
+		String In_data=In_data_names[data_sel]
+		//Wave res_cont=root:Measured_data:Avg_data$:(In_data+"_R_Avg")
+		Wave drive_cont=root:Measured_data:Avg_data:$(In_data+"_V_Avg")
+		Wave curr_cont=root:Measured_data:Avg_data:$(In_data+"_I_Avg")
+		//Wave Rser=root:Measured_data:Aux_data:RserMeas
+		//Variable Rserial=Rser[data_sel]
+		
+		AppendToGraph curr_cont vs drive_cont
+		
+	endfor
+End
+
+
+Function Denoising_Signal(ReadAmpl, MaxAmpl, Step, ReadLength, PulseLength)
+	Variable MaxAmpl, Step, ReadAmpl, ReadLength, PulseLength
+	
+	//signal: start with 0 mV + first readout, then 1 pair of denoising pulse + 1 readout
+	
+	Wave SegmentsData=root:Signal_variables:SegmentsData
+	NVar NumOfSegments=root:Signal_variables:NumOfSegments
+	NVar CurrSegment=root:Signal_variables:CurrSegment
+	ClearSegm()
+	
+	Variable NumOfRep = (MaxAmpl-ReadAmpl)/Step
+	
+	if(NumOfRep != trunc(NumOfRep))
+		Step = (MaxAmpl-ReadAmpl)/round(NumOfRep)
+		printf "Step was adjusted to %f mV", Step
+		NumOfRep = (MaxAmpl-ReadAmpl)/Step
+	endif
+	
+	NumOfSegments = 2 + 3*NumOfRep +1
+	
+	Redimension/N=(NumOfSegments,3) SegmentsData
+	
+	// first base 0 mV plateau
+	SegmentsData[0][0] = ReadLength
+	SegmentsData[0][1] = 0
+	SegmentsData[0][2] = 0
+
+	//readout plateaus
+	Variable i
+	for(i=1;i<NumOfSegments;i+=3)
+		SegmentsData[i][0] = ReadLength
+		SegmentsData[i][1] = ReadAmpl
+		SegmentsData[i][2] = ReadAmpl
+	endfor
+	
+	//pulse pairs
+	Variable j=1
+	for(i=2;i<NumOfSegments-1;i+=3)
+		//positive
+		SegmentsData[i][0] = PulseLength
+		SegmentsData[i][1] = ReadAmpl+j*Step
+		SegmentsData[i][2] = ReadAmpl+j*Step
+		//negative
+		SegmentsData[i+1][0] = PulseLength
+		SegmentsData[i+1][1] = -(ReadAmpl+j*Step)
+		SegmentsData[i+1][2] = -(ReadAmpl+j*Step)
+		
+		j+=1
+	endfor
+	
+	CurrSegment=0
+		
+	SetVariable CurrSegLength value=_NUM:0
+	SetVariable CurrSegLength  value=_NUM:SegmentsData[CurrSegment][0]
+	SetVariable CurrSegVstart value=_NUM:0
+	SetVariable CurrSegVstart value=_NUM:SegmentsData[CurrSegment][1]
+	SetVariable CurrSegVend value=_NUM:0
+	SetVariable CurrSegVend value=_NUM:SegmentsData[CurrSegment][2]
+	Slider SegSelector limits= {0,NumOfSegments-1,1}
+	Slider SegSelector value=CurrSegment
+	
+	generate_signal()
+	
+	if(CurrSegment>0)
+		ValDisplay PrevSegLength value=0
+		ValDisplay PrevSegLength value=_NUM:SegmentsData[CurrSegment-1][0]
+		ValDisplay PrevSegVstart value=0
+		ValDisplay PrevSegVstart value=_NUM:SegmentsData[CurrSegment-1][1]
+		ValDisplay PrevSegVend value=0
+		ValDisplay PrevSegVend value=_NUM:SegmentsData[CurrSegment-1][2]
+	else
+		ValDisplay PrevSegLength value=0
+		ValDisplay PrevSegVstart value=0
+		ValDisplay PrevSegVend value=0
+	endif
+	if(CurrSegment<NumOfSegments-1)
+		ValDisplay NextSegLength value=0
+		ValDisplay NextSegLength value=_NUM:SegmentsData[CurrSegment+1][0]
+		ValDisplay NextSegVstart value=0
+		ValDisplay NextSegVstart value=_NUM:SegmentsData[CurrSegment+1][1]
+		ValDisplay NextSegVend value=0
+		ValDisplay NextSegVend value=_NUM:SegmentsData[CurrSegment+1][2]
+	else
+		ValDisplay NextSegLength value=0
+		ValDisplay NextSegVstart value=0
+		ValDisplay NextSegVend value=0
+	endif
+	
+	MakePlot()
+End
+
+
+Function CopyIV_lowres(res)
+	Variable res
+	Make/O/N=0 IV_I
+	Make/O/N=0 IV_V
+	
+	Wave IV_I_highres = root:Plot_variables:G0left
+	Wave IV_V_highres = root:Plot_variables:G0bottom
+	Variable i, j=0
+	
+	for(i=0;i<numpnts(IV_I_highres);i+=res)
+		InsertPoints/V=(IV_I_highres[i]) j, 1, IV_I
+		InsertPoints/V=(IV_V_highres[i]) j, 1, IV_V
+		j += 1
+	endfor
+End

@@ -1,0 +1,1008 @@
+#pragma TextEncoding = "UTF-8"
+#pragma rtGlobals=3		// Use modern global access method and strict wave access.
+
+
+Function/S Auto_Eval_BIN_Multiple(Navg)
+	Variable Navg
+	Variable refNum
+	String message = "Select one or more files"
+	String outputPaths
+	//String fileFilters = "Data Files (*.txt,*.dat,*.csv):.txt,.dat,.csv;"
+	//fileFilters += "All Files:.*;"
+	String fileFilters ="All Files:.*;"
+	 
+	Open /D /R /F=fileFilters /MULT=1 /M=message refNum
+	outputPaths = S_fileName
+ 
+	if (strlen(outputPaths) == 0)
+		Print "Cancelled"
+	else
+		Variable numFilesSelected = ItemsInList(outputPaths, "\r")
+		Variable i
+		for(i=0; i<numFilesSelected; i+=1)
+			String path = StringFromList(i, outputPaths, "\r")
+			Printf "%d: %s\r", i, path
+			
+			Load_Arb_Multiple(path)
+			Wave /T In_data_names=root:Program_variables:In_data_names
+			CalcSegmPoints(0)
+			CalculatePSDs()
+			
+			//Continuous IV plotting
+			//Wave SegmPSD=root:Measured_data:Aux_data:$(S_filename+"_SegmPSD")
+			//if(Dimsize(SegmPSD,0)==0)  //valamiért nem létezik a SegmPSD az IV-knél
+				// adjust resolution (for long measurements)
+			
+				// plot I vs V
+			//	PopupMenu G0select mode=6
+			//	PopupMenu G1select mode=1	
+			
+			//endif
+			
+			
+
+			MakePlot()
+			
+			ControlInfo AutoSave
+			if(V_Value)
+				SavePSDs()
+			endif
+			
+			ControlInfo autoclear
+			if(V_Value)
+				ClearMeas()
+				MakePlot()
+			endif
+		endfor
+	endif
+ 
+	return outputPaths		// Will be empty if user canceled
+End
+
+
+Function Load_Arb_Multiple(path)
+	String path
+	Wave load_temp0=root:load_temp0
+	NVar length=root:Signal_variables:length
+	Wave SegmData=root:Signal_variables:SegmentsData
+	Wave Arbitrary_out=root:Signal_variables:Arbitrary_out
+	NVar NumOfSegm=root:Signal_variables:NumOfSegments
+	NVar CurrSegment=root:Signal_variables:CurrSegment
+	
+	Wave lengthMeas=root:Measured_data:Aux_data:lengthMeas
+	Wave NumOfSegmMeas=root:Measured_data:Aux_data:NumOfSegmMeas
+
+	GBLoadWave/Q/O/B/V/T={2,4} path
+	S_waveNames=RemoveEnding(S_waveNames)
+	Wave MyWave=$S_waveNames
+	Variable SampleRate=MyWave[2]
+	Variable gain=MyWave[4]
+	Variable Rser=MyWave[5]
+	Variable AgilentOFF=0
+	Variable CardOFF=0
+	Variable ProgOFF=0
+	Variable BiasDiv=0
+	Variable AgilentTime=0
+	Variable RCTime=0
+	Variable ch_mode=MyWave[0]
+	Variable mode=MyWave[3] //Amplifier mode Voltage - 0 Current - 1
+	Variable coupling=MyWave[1] //DC - 0 AC - 1
+ 	String name=S_fileName
+	Variable meas_mode=MyWave[19]
+	
+	S_fileName=ReplaceString(".IV",S_fileName, "", 1) //Régi fájlokból kiveszi a .IV részt
+	//Megnézi, hogy van-e ilyen nevű fájl. Ha van, akkor hozzáad egy _fi számot a név végéhez és megnézi, hogy az már van-e és így tovább
+	Wave /T In_data_names=root:Program_variables:In_data_names
+	Variable fi=1
+	FindValue /TEXT=S_fileName In_data_names
+	if(V_Value!=-1)
+		do
+			fi+=1
+			FindValue /TEXT=(S_fileName+"_"+num2str(fi)) In_data_names
+		while(V_Value!=-1)
+		S_fileName+="_"+num2str(fi)
+	endif
+
+	
+	//SetVariable CompOffsetVar value=_NUM:0
+	//ControlInfo CompOffsetVar
+	//ProgOFF=V_Value
+	
+	if(meas_mode==2||meas_mode==3)
+		NumofSegm=MyWave[21]
+		Duplicate/O MyWave,root:Signal_variables:loaded_signal
+		Wave loaded_signal=root:Signal_variables:loaded_signal
+		DeletePoints 0,20,loaded_signal
+		DeletePoints 2+NumofSegm*3,1e10,loaded_signal
+		
+		LoadSegmDatas(loaded_signal)
+		//Azért kell a NumofSegm-ből egyet levonni, mert a LoadSegmDatas() a valódi szegmensek számához egyet hozzáad, mert a segm adatok végén van egy üres sor
+		Make/D/O/N=(numpnts(MyWave)-(20+2+(NumofSegm-1)*3)) RawData=0
+		RawData[] = MyWave[(20+2+(NumofSegm-1)*3) + p]
+		Duplicate/O Arbitrary_out Drive_temp
+		DeletePoints 0, 2+(NumofSegm-1)*3, Drive_temp
+		//KISZEDVE EGYELŐRE!!!Itt azért van varázslás, mert az új Labview program elcsal néhány pontot a kimentésből és ezért a kiírt mérési hossz nem egyezik a valós mérési hosszal
+		NVar length=root:Signal_variables:length
+		DeletePoints (length*SampleRate/1000),1e10,RawData
+		Duplicate/O RawData Drive_mV_steps
+		Interpolate2/T=1/N=(DimSize(Drive_mV_steps,0))/Y='Drive_mV_steps' Drive_temp
+		Drive_mV_steps*=1000
+	
+		if(meas_mode==3)
+			AgilentOFF=MyWave[6]
+			CardOFF=MyWave[7]
+			BiasDiv=MyWave[8]
+			AgilentTime=MyWave[9]
+			RCTime=MyWave[10]
+			RawData-=CardOFF/1000
+			//Drive_mV_steps-=AgilentOFF
+		endif
+	endif
+	
+	SetScale/P x 0,1/SampleRate,"", RawData
+	SetScale/P x 0,1/SampleRate,"", Drive_mV_steps
+	if(mode==0)
+		RawData=RawData/gain
+		Duplicate /O RawData Resistance
+		Resistance=(RawData*Rser)/(Drive_mV_steps/1000-RawData)
+		
+	elseif(mode==1)
+		RawData=RawData/gain
+		Duplicate /O RawData Resistance
+		Resistance=Drive_mV_steps/1000/(RawData)-Rser
+	else
+		DoAlert /T="Set Mode" 0, "Set Voltage or Current"
+		return -1
+	endif
+	
+	SetScale/P x 0,1/SampleRate,"", RawData
+	SetScale/P x 0,1/SampleRate,"", Drive_mV_steps
+	SetScale/P x 0,1/SampleRate,"", Resistance
+
+	if(DimSize(Resistance,1)==0)
+		print mean(Resistance)
+	endif
+	
+	MoveWave RawData,root:Measured_data:$(S_filename+"_I")
+	MoveWave Drive_mV_steps,root:Measured_data:$(S_filename+"_V")
+	MoveWave Resistance,root:Measured_data:$(S_filename+"_R")
+
+	KillWaves MyWave,Drive_temp
+
+	Wave /T Full_path=root:Program_variables:Full_path
+	NVAR data_sel=root:Program_variables:data_sel
+	InsertPoints (DimSize(In_data_names,0)-1),1, In_data_names
+	In_data_names[DimSize(In_data_names,0)-2][]=S_fileName
+	Full_path[DimSize(Full_path,0)-1][]=S_path+name
+	Redimension/N=(DimSize(Full_path,0)+1,-1) Full_path
+	data_sel=DimSize(In_data_names,0)-2
+	//select corresponding row in Listbox
+	ListBox FileList selRow=data_sel
+	
+	Wave lengthMeas=root:Measured_data:Aux_data:lengthMeas
+	Wave NumOfSegmMeas=root:Measured_data:Aux_data:NumOfSegmMeas
+	Wave FFTptMeas=root:Measured_data:Aux_data:FFTptMeas
+	Wave dfMeas=root:Measured_data:Aux_data:dfMeas
+	Wave RserMeas=root:Measured_data:Aux_data:RserMeas
+	Wave SampRateMeas=root:Measured_data:Aux_data:SampRateMeas
+	Wave CardOffsetMeas=root:Measured_data:Aux_data:CardOffsetMeas
+	Wave AgilentOffsetMeas=root:Measured_data:Aux_data:AgilentOffsetMeas
+	Wave ProgCompOffset=root:Measured_data:Aux_data:ProgCompOffset
+	Wave BiasDivMeas=root:Measured_data:Aux_data:BiasDivMeas
+	Wave AgilentTimeMeas=root:Measured_data:Aux_data:AgilentTimeMeas
+	Wave RCTimeMeas=root:Measured_data:Aux_data:RCTimeMeas
+	
+	Wave GainMeas=root:Measured_data:Aux_data:GainMeas
+	Wave CHMeas=root:Measured_data:Aux_data:CHMeas
+	Wave AmplModeMeas=root:Measured_data:Aux_data:AmplModeMeas
+	Wave CouplingMeas=root:Measured_data:Aux_data:CouplingMeas
+	Wave ModeMeas=root:Measured_data:Aux_data:ModeMeas
+	
+	Variable NumOfMeas=DimSize(lengthMeas,0)
+	Redimension/N=(NumOfMeas+1,-1) lengthMeas,NumOfSegmMeas,FFTptMeas,dfMeas,RserMeas,SampRateMeas,CardOffsetMeas,AgilentOffsetMeas,ProgCompOffset,BiasDivMeas,AgilentTimeMeas,RCTimeMeas,GainMeas,CHMeas,AmplModeMeas,CouplingMeas,ModeMeas
+	lengthMeas[NumOfMeas]=length
+	NumOfSegmMeas[NumOfMeas]=NumOfSegm
+	RserMeas[NumOfMeas]=Rser
+	SampRateMeas[NumOfMeas]=SampleRate
+	CardOffsetMeas[NumOfMeas]=CardOFF
+	AgilentOffsetMeas[NumOfMeas]=AgilentOFF
+	ProgCompOffset[NumOfMeas]=ProgOFF
+	BiasDivMeas[NumOfMeas]=BiasDiv
+	AgilentTimeMeas[NumOfMeas]=AgilentTime
+	GainMeas[NumOfMeas]=gain
+	ModeMeas[NumOfMeas]=meas_mode
+	CHMeas[NumOfMeas]=ch_mode
+	AmplModeMeas[NumOfMeas]=mode
+	CouplingMeas[NumOfMeas]=coupling
+	
+	Duplicate /O SegmData, root:Measured_data:Aux_data:$(S_fileName+"_SegmData")
+	Redimension/N=(-1,4) root:Measured_data:Aux_data:$(S_fileName+"_SegmData")
+	Make /N=(NumOfSegm,3) root:Measured_data:Aux_data:$(S_fileName+"_SegmPts")
+	Wave SegmPts=root:Measured_data:Aux_data:$(S_fileName+"_SegmPts")
+	Variable k=0
+	for(k=0;k<NumOfSegm-1;k=k+1)
+		SegmPts[k][0]=loaded_signal[2+k*3]
+		SegmPts[k][1]=loaded_signal[2+k*3+1]
+		SegmPts[k][2]=loaded_signal[2+k*3+2]
+	
+	endfor
+
+End
+
+
+//first change signal with divide current segment options
+Function ReplaceMeasSignal()
+	Wave /T In_data_names=root:Program_variables:In_data_names
+	NVAR data_sel=root:Program_variables:data_sel
+	//if(data_sel!=DimSize(In_data_names,0)-1)
+	String S_filename=In_data_names[data_sel]
+	
+	Wave load_temp0=root:load_temp0
+	NVar length=root:Signal_variables:length
+	Wave SegmData=root:Signal_variables:SegmentsData
+	Wave signal=root:Signal_variables:Arbitrary_out
+	NVar NumOfSegm=root:Signal_variables:NumOfSegments
+	NVar CurrSegment=root:Signal_variables:CurrSegment
+	Wave NumOfSegmMeas=root:Measured_data:Aux_data:NumOfSegmMeas
+	
+	NumOfSegmMeas[data_sel]=NumOfSegm
+	
+	Duplicate /O SegmData, root:Measured_data:Aux_data:$(S_fileName+"_SegmData")
+	Redimension/N=(-1,4) root:Measured_data:Aux_data:$(S_fileName+"_SegmData")
+	Make /O/N=(NumOfSegm,3) root:Measured_data:Aux_data:$(S_fileName+"_SegmPts")
+	Wave SegmPts=root:Measured_data:Aux_data:$(S_fileName+"_SegmPts")
+	Variable k=0
+	for(k=0;k<NumOfSegm-1;k=k+1)
+		SegmPts[k][0]=signal[2+k*3]
+		SegmPts[k][1]=signal[2+k*3+1]
+		SegmPts[k][2]=signal[2+k*3+2]
+	endfor
+
+End
+
+
+Function ClearMeas()
+	KillWaves /A
+	KillVariables /A
+	SetDataFolder Measured_data
+	KillWaves /A
+	KillVariables /A
+	SetDataFolder Aux_data
+	KillWaves /A
+	KillVariables /A
+	SetDataFolder root:Measured_data:Avg_data
+	KillWaves /A
+	KillVariables /A
+	SetDataFolder root:PSD_out
+	KillWaves /A
+	KillVariables /A
+	SetDataFolder root:
+	
+	Wave /T In_data_names=root:Program_variables:In_data_names
+	Wave /T Full_path=root:Program_variables:Full_path
+	NVAR data_sel=root:Program_variables:data_sel
+	
+	SetVariable CompOffsetVar value=_NUM:0
+	
+	DeletePoints 1,1e10,In_data_names
+	DeletePoints 1,1e10,Full_path
+	
+	In_data_names[0][]="Signal mode"
+	Full_path[0][]=""
+	data_sel=0
+	
+	Make/N=0/O root:Measured_data:Aux_data:lengthMeas
+	Make/N=0/O root:Measured_data:Aux_data:NumOfSegmMeas
+	Make/N=0/O root:Measured_data:Aux_data:FFTptMeas
+	Make/N=0/O root:Measured_data:Aux_data:dfMeas
+	Make/N=0/O root:Measured_data:Aux_data:dfMeas
+	Make/N=0/O root:Measured_data:Aux_data:RserMeas
+	Make/N=0/O root:Measured_data:Aux_data:SampRateMeas
+	Make/N=0/O root:Measured_data:Aux_data:CardOffsetMeas
+	Make/N=0/O root:Measured_data:Aux_data:AgilentOffsetMeas
+	Make/N=0/O root:Measured_data:Aux_data:ProgCompOffset
+	Make/N=0/O root:Measured_data:Aux_data:BiasDivMeas
+	Make/N=0/O root:Measured_data:Aux_data:AgilentTimeMeas
+	Make/N=0/O root:Measured_data:Aux_data:RCTimeMeas
+	Make/N=0/O root:Measured_data:Aux_data:GainMeas
+	Make/N=0/O root:Measured_data:Aux_data:CHMeas
+	Make/N=0/O root:Measured_data:Aux_data:AmplModeMeas
+	Make/N=0/O root:Measured_data:Aux_data:CouplingMeas
+	Make/N=0/O root:Measured_data:Aux_data:ModeMeas
+	
+	Wave G1left=root:Plot_variables:G1left
+	Wave G1bottom=root:Plot_variables:G1bottom
+	//Wave G0left=root:Plot_variables:G0left
+	//Wave G0bottom=root:Plot_variables:G0bottom
+	//Wave G0left2=root:Plot_variables:G0left2
+	//Wave G0bottom2=root:Plot_variables:G0bottom2
+	Redimension /N=(1,-1) G1left
+	Redimension /N=(1,-1) G1bottom
+	//Redimension /N=(1,-1) G0left
+	//Redimension /N=(1,-1) G0bottom
+	//Redimension /N=(1,-1) G0left2
+	//Redimension /N=(1,-1) G0bottom2
+	G1left=0
+	//G0left=0
+	//G0left2=0
+	G1bottom=0
+	//G0bottom=0
+	//G0bottom2=0
+End
+
+
+Function CalcSegmPoints(Navg)
+	Variable Navg
+	NVAR in_data_num=root:Program_variables:data_sel
+	Wave /T In_data_names=root:Program_variables:In_data_names
+	
+	//Kiválasztja az adott mérést
+	//Az utolsó sor üres, ez védi le, hogy ekkor ne legyen ábrázolás. Továbbá ha nincs betöltve mért adat, akkor sem fut le. Az if vége a függvény végén van.
+	if(in_data_num!=DimSize(In_data_names,0)-1)
+		ControlInfo dtSet
+		Variable dt=V_Value
+		ControlInfo CutStart
+		Variable cutStartms=V_Value
+		ControlInfo CutStop
+		Variable cutStopms=V_Value
+		
+		Wave SegmData=root:SegmData
+		Variable NumSegmPSD=0
+		Variable NumSegmSweep=0
+		Variable NumFFT=0
+		
+		Wave /T In_data_names=root:Program_variables:In_data_names
+		String S_filename=In_data_names[in_data_num]
+		Wave SegmPts=root:Measured_data:Aux_data:$(S_filename+"_SegmPts")
+		Wave SegmData=root:Measured_data:Aux_data:$(S_filename+"_SegmData")
+		Wave NumOfSegmMeas=root:Measured_data:Aux_data:NumOfSegmMeas
+		Wave FFTptMeas=root:Measured_data:Aux_data:FFTptMeas
+		Wave dfMeas=root:Measured_data:Aux_data:dfMeas
+		
+		Variable NumofSegm=NumOfSegmMeas[in_data_num]
+		
+		Wave MeasCurrent=root:Measured_data:$(S_filename+"_I")
+		
+		dt=2^round(log(dt/1000/DimDelta(MeasCurrent,0))/log(2))
+		FFTptMeas[in_data_num]=dt
+		dfMeas[in_data_num]=1/dt/DimDelta(MeasCurrent,0)
+		
+		//
+		
+		//Select segment for PSD
+		
+		Variable si=0
+		
+		Make /O/N=(0,6) root:Measured_data:Aux_data:$(S_filename+"_SegmPSD")
+		Wave SegmPSDData=root:Measured_data:Aux_data:$(S_filename+"_SegmPSD")
+		
+		Variable bool_nopoints=0
+		
+		for(si=0;si<NumofSegm-1;si++)
+			SegmData[si][3]=-1 //Ez jelöli, ha nem PSD szegmens, mert változik a feszültség
+			if(SegmPts[si][1]==SegmPts[si][2])
+				NumSegmPSD+=1
+				Redimension/N=(NumSegmPSD,-1) SegmPSDData
+		
+			//else
+			//NumSegmSweep+=1
+			//SegmPSDData[NumSegmPSD-1][4]=0
+		
+				//Leképzés, hogy az adott szegmens hányadik PSD szegmens
+				SegmData[si][3]=NumSegmPSD-1
+				if(si>0)
+					//Segment start
+					SegmPSDData[NumSegmPSD-1][0]=round(SegmPts[si-1][0]*(DimSize(MeasCurrent,0)/65536))
+					//cut the first cutStartms of the segment
+					SegmPSDData[NumSegmPSD-1][2]=SegmPSDData[NumSegmPSD-1][0]+ceil(cutStartms/DimDelta(MeasCurrent,0)/1000)
+				else
+					SegmPSDData[NumSegmPSD-1][0]=0
+					//cut the first cutStartms of the segment
+					SegmPSDData[NumSegmPSD-1][2]=ceil(cutStartms/DimDelta(MeasCurrent,0)/1000)
+				endif
+				
+				//Segment last
+				SegmPSDData[NumSegmPSD-1][1]=round(SegmPts[si][0]*(DimSize(MeasCurrent,0)/65536)) 
+				//cut the last cutStopms of the segment
+				SegmPSDData[NumSegmPSD-1][3]=SegmPSDData[NumSegmPSD-1][1]-ceil(cutStopms/DimDelta(MeasCurrent,0)/1000)
+				//calculate number of FFT for segment
+				SegmPSDData[NumSegmPSD-1][4]=floor((SegmPSDData[NumSegmPSD-1][3]-SegmPSDData[NumSegmPSD-1][2])/dt)
+				//Segment Bias
+				SegmPSDData[NumSegmPSD-1][5]=SegmPts[si][1] 
+				
+				if(SegmPSDData[NumSegmPSD-1][4]<=0)
+					NumSegmPSD-=1
+					Redimension/N=(NumSegmPSD,-1) SegmPSDData
+					bool_nopoints=1
+				else
+					NumFFT+=SegmPSDData[NumSegmPSD-1][4]
+				endif
+			endif
+		endfor
+		
+		if(bool_nopoints)
+			//DoAlert /T="Warning: Not enough points!" 0, "Wrong settings! There are not enough FFT points for at least one segment!\rReview the dt, CutStart os CutStop values!"
+		endif
+	endif
+End
+
+
+Function LoadActArb()
+	Wave /T In_data_names=root:Program_variables:In_data_names
+	//Kiválasztja az adott mérést
+	//Az utolsó sor üres, ez védi le, hogy ekkor ne legyen ábrázolás. Továbbá ha nincs betöltve mért adat, akkor sem fut le. Az if vége a függvény végén van.
+	NVAR data_sel=root:Program_variables:data_sel
+	if(data_sel!=DimSize(In_data_names,0)-1)
+		String S_filename=In_data_names[data_sel]
+		//Arbitrary jel betöltése és ábrázolása a G0-n
+		Wave SegmPts=root:Measured_data:Aux_data:$(S_filename+"_SegmPts")
+		Wave loaded_signal=root:Signal_variables:loaded_signal
+		Wave lengthMeas=root:Measured_data:Aux_data:lengthMeas
+		Wave NumOfSegmMeas=root:Measured_data:Aux_data:NumOfSegmMeas
+		
+		Redimension /N=(3*(DimSize(SegmPts,0)-1)+2,-1) loaded_signal
+		loaded_signal[0]=lengthMeas[data_sel]/1000
+		loaded_signal[1]=NumOfSegmMeas[data_sel]-1 //azért kell, mert a betöltéskor csak annyi szegmens van, amennyit ténylegesen kiadunk, de az igorban a NumOfSegmMeas plusz egy 0 sort tartalmaz
+		
+		Variable i=0
+		for(i=0;i<(DimSize(SegmPts,0)-1);i=i+1)
+			loaded_signal[2+3*i]=SegmPts[i][0]
+			loaded_signal[2+3*i+1]=SegmPts[i][1]
+			loaded_signal[2+3*i+2]=SegmPts[i][2]
+			
+		endfor
+		LoadSegmDatas(loaded_signal)
+		Wave InData=root:Measured_data:$(S_fileName+"_I")
+		Wave FFTptMeas=root:Measured_data:Aux_data:FFTptMeas
+		Wave dfMeas=root:Measured_data:Aux_data:dfMeas
+		Variable NumPts=FFTptMeas[data_sel]
+		//print "Applied dt:", NumPts*DimDelta(InData,0)*1000, "ms"
+		ValDisplay dtApp value=0
+		ValDisplay dtApp value=_NUM:NumPts*DimDelta(InData,0)*1000
+		Variable df=dfMeas[data_sel] 
+		ValDisplay dfDisp value=0
+		ValDisplay dfDisp value=_NUM:df
+		
+		//Arbitrary betöltés vége
+	endif
+End
+
+
+Function MakePlot()
+	Wave /T In_data_names=root:Program_variables:In_data_names
+	NVAR data_sel=root:Program_variables:data_sel
+	Wave G0left=root:Plot_variables:G0left
+	Wave G0bottom=root:Plot_variables:G0bottom
+	Wave G0left2=root:Plot_variables:G0left2
+	Wave G0bottom2=root:Plot_variables:G0bottom2
+	Wave G1left=root:Plot_variables:G1left
+	Wave G1bottom=root:Plot_variables:G1bottom
+	
+	ControlInfo G0AutoScaleY
+	Variable G0autoY=V_Value
+	ControlInfo G0AutoScaleX
+	Variable G0autoX=V_Value
+	
+	//ControlInfo G0AutoScaleY
+	Variable G1autoY=1//V_Value
+	//ControlInfo G0AutoScaleY
+	Variable G1autoX=1//V_Value
+	
+	
+	//Kiválasztja az adott mérést
+	//Az utolsó sor üres, ez védi le, hogy ekkor ne legyen ábrázolás. Továbbá ha nincs betöltve mért adat, akkor sem fut le. Az if vége a függvény végén van.
+	if(data_sel==DimSize(In_data_names,0)-1)
+		PopupMenu G0select mode=1
+		Wave signal=root:Signal_variables:signal
+		Wave time_ms=root:Signal_variables:time_ms
+		NVar CurrSegment=root:Signal_variables:CurrSegment
+		Duplicate /O signal,G0left
+		Duplicate /O time_ms,G0bottom
+		Duplicate /O /R=[2*CurrSegment,2*CurrSegment+1] signal, G0left2
+		Duplicate /O /R=[2*CurrSegment,2*CurrSegment+1] time_ms, G0bottom2
+		Label/W=Panel0#G0 left "Agilent signal [mV]"
+		Label/W=Panel0#G0 bottom "Time [ms]"
+		ModifyGraph/W=Panel0#G0 log=0
+		ModifyGraph/W=Panel0#G0 mode=0,lsize(G0left)=2
+		ModifyGraph/W=Panel0#G0 manTick=0
+		ModifyGraph/W=Panel0#G0 gridStyle=0,gridHair=2,gridRGB=(26214,26214,26214)
+		if(G0autoX)
+			SetAxis/W=Panel0#G0/A bottom
+		endif
+		if(G0autoY)
+			SetAxis/W=Panel0#G0/A left
+		endif
+		
+	elseif(data_sel!=DimSize(In_data_names,0)-1)
+		String S_filename=In_data_names[data_sel]
+		
+		NVar CurrSegment=root:Signal_variables:CurrSegment
+		NVar NumOfSegments=root:Signal_variables:NumOfSegments
+		Wave SegmPSD=root:Measured_data:Aux_data:$(S_filename+"_SegmPSD")
+		Wave SegmData=root:Measured_data:Aux_data:$(S_filename+"_SegmData")
+		
+		Variable CurrPSDSegm=SegmData[CurrSegment][3]
+		
+		////A sweepelős segmenseket átugorja!
+		//if(SegmData[CurrSegment][2]!=SegmData[CurrSegment][1])
+		//do
+		//CurrSegment+=1
+		////Slider SegSelector value=CurrSegment
+		//while(SegmData[CurrSegment][2]!=SegmData[CurrSegment][1]&&CurrSegment<NumOfSegments)
+		//endif
+		
+		
+	//G1 ábrázolás
+	ControlInfo G1select
+	if(V_Value==1) //Segms. Current vs Time
+		Wave Current=root:Measured_data:$(S_filename+"_I")
+		if(CurrSegment==NumOfSegments-1) 
+			Duplicate /O Current,root:Plot_variables:G1left
+			Redimension /N=(DimSize(G1left,0),-1) G1bottom
+			G1bottom=p*DimDelta(Current,0)*1000
+		elseif(CurrPSDSegm!=-1)
+			Duplicate /O /R=[SegmPSD[CurrPSDSegm][2],SegmPSD[CurrPSDSegm][3]] Current,root:Plot_variables:G1left
+			Redimension /N=(DimSize(G1left,0),-1) G1bottom
+			G1bottom=(p+SegmPSD[CurrPSDSegm][2])*DimDelta(Current,0)*1000
+		endif
+			Label/W=Panel0#G1 left "Current [A]"
+			Label/W=Panel0#G1 bottom "Time [ms]"
+			ModifyGraph/W=Panel0#G1 log=0
+			ModifyGraph/W=Panel0#G1 mode=0,lsize=2
+		if(G1autoX)
+			SetAxis/W=Panel0#G1/A bottom
+		endif
+		if(G1autoY)
+			SetAxis/W=Panel0#G1/A left
+		endif
+		
+	elseif(V_Value==2) //Segms. AvgPSD
+		Wave PSD=root:PSD_out:$(S_filename+"_AvgPSD")
+		if(CurrSegment==NumOfSegments-1)
+			//Duplicate /O Current,root:Plot_variables:G1left
+			//Redimension /N=(DimSize(G1left,0),-1) G1bottom
+			//G1bottom=p*DimDelta(Current,0)*1000
+			//G1bottom=(p+SegmPSD[CurrSegment][2])*DimDelta(Current,0)*1000
+		elseif(CurrPSDSegm==-1)
+			G1left=0
+			G1bottom=0
+		elseif(CurrPSDSegm!=-1)
+			Duplicate /O /RMD=[][CurrPSDSegm,CurrPSDSegm] PSD,root:Plot_variables:G1left
+			Redimension /N=(DimSize(G1left,0),-1) G1bottom
+			G1bottom=p*DimDelta(PSD,0)
+		endif
+			Label/W=Panel0#G1 left "PSD [A/sqrt(Hz)]"
+			Label/W=Panel0#G1 bottom "f [Hz]"
+			ModifyGraph/W=Panel0#G1 log=1
+			ModifyGraph/W=Panel0#G1 mode=0,lsize=2
+		if(G1autoX)
+			SetAxis/W=Panel0#G1/A bottom
+		endif
+		if(G1autoY)
+			SetAxis/W=Panel0#G1/A left
+		endif
+		
+	elseif(V_Value==3) //Segms. AvgI vs AvgV
+		Wave AvgI=root:Measured_data:Avg_data:$(S_filename+"_I_Avg")
+		Wave AvgV=root:Measured_data:Avg_data:$(S_filename+"_V_Avg")
+		Duplicate /O AvgI,root:Plot_variables:G1left
+		Duplicate /O AvgV,root:Plot_variables:G1bottom
+		Label/W=Panel0#G1 left "Current [A]"
+		Label/W=Panel0#G1 bottom "Voltage [mV]"
+		ModifyGraph/W=Panel0#G1 log=0
+		ModifyGraph/W=Panel0#G1 mode=3,mrkThick=2,msize=5
+		if(G1autoX)
+			SetAxis/W=Panel0#G1/A bottom
+		endif
+		if(G1autoY)
+			SetAxis/W=Panel0#G1/A left
+		endif
+		
+	elseif(V_Value==4) //Segms. AvgR vs AvgV
+		Wave AvgR=root:Measured_data:Avg_data:$(S_filename+"_R_Avg")
+		Wave AvgV=root:Measured_data:Avg_data:$(S_filename+"_V_Avg")
+		Duplicate /O AvgR,root:Plot_variables:G1left
+		Duplicate /O AvgV,root:Plot_variables:G1bottom
+		Label/W=Panel0#G1 left "Resistance [Ω]"
+		Label/W=Panel0#G1 bottom "Voltage [mV]"
+		ModifyGraph/W=Panel0#G1 log=0
+		if(G1autoX)
+			SetAxis/W=Panel0#G1/A bottom
+		endif
+		if(G1autoY)
+			SetAxis/W=Panel0#G1/A left
+		endif
+	
+	elseif(V_Value==5) //Segms. VarI vs AvgV
+		Wave VarI_Avg=root:Measured_data:Avg_data:$(S_filename+"_VarI_Avg")
+		Wave AvgV=root:Measured_data:Avg_data:$(S_filename+"_V_Avg")
+		Duplicate /O VarI_Avg,root:Plot_variables:G1left
+		Duplicate /O AvgV,root:Plot_variables:G1bottom
+		Label/W=Panel0#G1 left "∆I\S2\M [A]"
+		Label/W=Panel0#G1 bottom "Voltage [mV]"
+		ModifyGraph log(left)=1
+		if(G1autoX)
+			SetAxis/W=Panel0#G1/A bottom
+		endif
+		if(G1autoY)
+			SetAxis/W=Panel0#G1/A left
+		endif
+	endif
+	//G1 ábrázolás vége
+	
+	//G0 ábrázolás
+	//GOleft kék (teljes jel)
+	//G0left2 piros(szegmens)
+	Variable DownFactor, MaxNumPnts = 1e5
+	ControlInfo G0select
+	if(V_Value==1) //Signal vs Time
+		Wave signal=root:Signal_variables:signal
+		Wave time_ms=root:Signal_variables:time_ms
+		Duplicate /O signal,G0left
+		Duplicate /O time_ms,G0bottom
+		
+		Duplicate /O /R=[2*CurrSegment,2*CurrSegment+1] signal, G0left2
+		Duplicate /O /R=[2*CurrSegment,2*CurrSegment+1] time_ms, G0bottom2
+		Label/W=Panel0#G0 left "Agilent signal [mV]"
+		Label/W=Panel0#G0 bottom "Time [ms]"
+		ModifyGraph/W=Panel0#G0 log=0
+		ModifyGraph/W=Panel0#G0 mode=0,lsize(G0left)=2
+		ModifyGraph/W=Panel0#G0 manTick=0
+		ModifyGraph/W=Panel0#G0 gridStyle=0,gridHair=2,gridRGB=(26214,26214,26214)
+		if(G0autoX)
+			SetAxis/W=Panel0#G0/A bottom
+		endif
+		if(G0autoY)
+			SetAxis/W=Panel0#G0/A left
+		endif
+		
+	elseif(V_Value==2) //Current vs Time
+		Wave Current=root:Measured_data:$(S_filename+"_I")
+		
+		Duplicate /O Current,root:Plot_variables:G0left
+		Redimension /N=(DimSize(G0left,0),-1) G0bottom
+		G0bottom=p*DimDelta(Current,0)*1000
+		if(CurrSegment==NumOfSegments-1)
+			Duplicate /O Current,root:Plot_variables:G0left2
+			Redimension /N=(DimSize(G0left2,0),-1) G0bottom2
+			G0bottom2=p*DimDelta(Current,0)*1000
+		elseif(CurrPSDSegm!=-1)
+			Duplicate /O /R=[SegmPSD[CurrPSDSegm][2],SegmPSD[CurrPSDSegm][3]] Current,G0left2
+			Redimension /N=(DimSize(G0left2,0),-1) G0bottom2
+			G0bottom2=(p+SegmPSD[CurrPSDSegm][2])*DimDelta(Current,0)*1000
+		endif
+		Label/W=Panel0#G0 left "Current [A]"
+		Label/W=Panel0#G0 bottom "Time [ms]"
+		ModifyGraph/W=Panel0#G0 log=0
+		ModifyGraph/W=Panel0#G0 mode=0,lsize(G0left)=2
+		ModifyGraph/W=Panel0#G0 manTick=0
+		ModifyGraph/W=Panel0#G0 gridStyle=0,gridHair=2,gridRGB=(26214,26214,26214)
+		if(G0autoX)
+			SetAxis/W=Panel0#G0/A bottom
+		endif
+		if(G0autoY)
+			SetAxis/W=Panel0#G0/A left
+		endif
+		
+	elseif(V_Value==3) //Resistance vs Time
+		Wave Current=root:Measured_data:$(S_filename+"_R")
+		Duplicate /O Current,root:Plot_variables:G0left
+		Redimension /N=(DimSize(G0left,0),-1) G0bottom
+		G0bottom=p*DimDelta(Current,0)*1000
+		if(CurrSegment==NumOfSegments-1)
+			Duplicate /O Current,root:Plot_variables:G0left2
+			Redimension /N=(DimSize(G0left2,0),-1) G0bottom2
+			G0bottom2=p*DimDelta(Current,0)*1000
+		elseif(CurrPSDSegm!=-1)
+			Duplicate /O /R=[SegmPSD[CurrPSDSegm][2],SegmPSD[CurrPSDSegm][3]] Current,G0left2
+			Redimension /N=(DimSize(G0left2,0),-1) G0bottom2
+			G0bottom2=(p+SegmPSD[CurrPSDSegm][2])*DimDelta(Current,0)*1000
+		endif
+		Label/W=Panel0#G0 left "Resistance [Ω]"
+		Label/W=Panel0#G0 bottom "Time [ms]"
+		ModifyGraph/W=Panel0#G0 log=0
+		ModifyGraph/W=Panel0#G0 mode=0,lsize(G0left)=2
+		ModifyGraph/W=Panel0#G0 manTick=0
+		ModifyGraph/W=Panel0#G0 gridStyle=0,gridHair=2,gridRGB=(26214,26214,26214)
+		if(G0autoX)
+			SetAxis/W=Panel0#G0/A bottom
+		endif
+		if(G0autoY)
+			SetAxis/W=Panel0#G0 left 0.1*mean(G0left),10*mean(G0left)
+		endif
+		
+	elseif(V_Value==4) //Segm. Current vs Time
+		Wave Current=root:Measured_data:$(S_filename+"_I")
+		if(CurrSegment==NumOfSegments-1)
+			Duplicate /O Current,root:Plot_variables:G0left
+			Redimension /N=(DimSize(G0left,0),-1) G0bottom
+			G0bottom=p*DimDelta(Current,0)*1000
+			Duplicate /O Current,root:Plot_variables:G0left2
+			Redimension /N=(DimSize(G0left2,0),-1) G0bottom2
+			G0bottom2=p*DimDelta(Current,0)*1000
+		elseif(CurrPSDSegm!=-1)
+			Duplicate /O /R=[SegmPSD[CurrPSDSegm][2],SegmPSD[CurrPSDSegm][3]] Current,G0left
+			Redimension /N=(DimSize(G0left,0),-1) G0bottom
+			G0bottom=(p+SegmPSD[CurrPSDSegm][2])*DimDelta(Current,0)*1000
+			Duplicate /O /R=[SegmPSD[CurrPSDSegm][2],SegmPSD[CurrPSDSegm][3]] Current,G0left2
+			Redimension /N=(DimSize(G0left2,0),-1) G0bottom2
+			G0bottom2=(p+SegmPSD[CurrPSDSegm][2])*DimDelta(Current,0)*1000
+		endif
+		Label/W=Panel0#G0 left "Current [A]"
+		Label/W=Panel0#G0 bottom "Time [ms]"
+		ModifyGraph/W=Panel0#G0 log=0
+		ModifyGraph/W=Panel0#G0 mode=0,lsize(G0left)=2
+		if(G0autoX)
+			SetAxis/W=Panel0#G0/A bottom
+		endif
+		if(G0autoY)
+			SetAxis/W=Panel0#G0/A left
+		endif
+		Wave FFTptMeas=root:Measured_data:Aux_data:FFTptMeas
+		DoUpdate /W=Panel0#G0
+		GetAxis /W=Panel0#G0 bottom
+		print V_min
+		ModifyGraph /W=Panel0#G0 manTick(bottom)={V_min,FFTptMeas[data_sel]*DimDelta(Current,0)*1e3,0,1},manMinor(bottom)={0,0}
+		ModifyGraph/W=Panel0#G0 gridStyle(bottom)=3,gridHair(bottom)=0,gridRGB(bottom)=(0,65535,0)
+		
+	elseif(V_Value==5) //Segms. AvgI vs AvgV
+		Wave AvgI=root:Measured_data:Avg_data:$(S_filename+"_I_Avg")
+		Wave AvgV=root:Measured_data:Avg_data:$(S_filename+"_V_Avg")
+		Duplicate /O AvgI,root:Plot_variables:G0left
+		Duplicate /O AvgV,root:Plot_variables:G0bottom
+		if(CurrSegment==NumOfSegments-1)
+			Duplicate /O AvgI,root:Plot_variables:G0left2
+			Duplicate /O AvgV,root:Plot_variables:G0bottom2
+		elseif(CurrPSDSegm!=-1)
+			Duplicate /O /R=[CurrPSDSegm,CurrPSDSegm] AvgI,root:Plot_variables:G0left2
+			Duplicate /O /R=[CurrPSDSegm,CurrPSDSegm] AvgV,root:Plot_variables:G0bottom2
+		endif
+		Label/W=Panel0#G0 left "Current [A]"
+		Label/W=Panel0#G0 bottom "Voltage [mV]"
+		ModifyGraph/W=Panel0#G0 log=0
+		ModifyGraph/W=Panel0#G0 mode=3,mrkThick=2,msize=5
+		ModifyGraph/W=Panel0#G0 manTick=0
+		ModifyGraph/W=Panel0#G0 gridStyle=0,gridHair=2,gridRGB=(26214,26214,26214)
+		if(G0autoX)
+			SetAxis/W=Panel0#G0/A bottom
+		endif
+		if(G0autoY)
+			SetAxis/W=Panel0#G0/A left
+		endif
+
+	elseif(V_Value==6) //IV continuous
+		Wave I=root:Measured_data:$(S_filename+"_I")
+		Wave V=root:Measured_data:$(S_filename+"_V")
+		Duplicate /O I,root:Plot_variables:G0left
+		Duplicate /O V,root:Plot_variables:G0bottom
+		Label/W=Panel0#G0 left "Current [A]"
+		Label/W=Panel0#G0 bottom "Voltage [mV]"
+		ModifyGraph/W=Panel0#G0 log=0
+		ModifyGraph/W=Panel0#G0 mode=2,mrkThick=2,msize=5
+		ModifyGraph/W=Panel0#G0 manTick=0
+		ModifyGraph/W=Panel0#G0 gridStyle=0,gridHair=2,gridRGB=(26214,26214,26214)
+		if(G0autoX)
+			SetAxis/W=Panel0#G0/A bottom
+		endif
+		if(G0autoY)
+			SetAxis/W=Panel0#G0/A left
+		endif
+	endif
+	//G0 ábrázolás vége
+	
+	//clear the unused waves, if the selected measurement is a continuous IV
+	if(Dimsize(SegmPSD,0)==0)
+		Make /N=0/O root:Plot_variables:G0bottom2
+		Make /N=0/O root:Plot_variables:G0left2
+	endif
+	
+	endif
+End
+
+
+Function CalculatePSDs()
+
+	NVAR in_data_num=root:Program_variables:data_sel
+	Wave /T In_data_names=root:Program_variables:In_data_names
+	String S_filename=In_data_names[in_data_num]
+	Wave InData=root:Measured_data:$(S_fileName+"_I")
+	Wave SegmPSD=root:Measured_data:Aux_data:$(S_fileName+"_SegmPSD")
+	Wave FFTptMeas=root:Measured_data:Aux_data:FFTptMeas
+	Wave dfMeas=root:Measured_data:Aux_data:dfMeas
+	Wave RserMeas=root:Measured_data:Aux_data:RserMeas
+	Wave SampRateMeas=root:Measured_data:Aux_data:SampRateMeas
+	Variable NumSegmPSD=Dimsize(SegmPSD,0)
+	
+	//Kiválasztja az adott mérést
+	//Az utolsó sor üres, ez védi le, hogy ekkor ne legyen ábrázolás. Továbbá ha nincs betöltve mért adat, akkor sem fut le. Az if vége a függvény végén van.
+	if(in_data_num!=DimSize(In_data_names,0)-1)
+	
+	//Calculate the total number of PSDs
+		Make /O/N=0 sum_temp
+		SumDimension /D=0 /DEST=sum_temp SegmPSD
+		Variable NumFFT=sum_temp[4]
+		KillWaves sum_temp
+		
+		Variable SampleRate=SampRateMeas[in_data_num]
+		
+		Variable NumPts=FFTptMeas[in_data_num]
+		ValDisplay dtApp value=0
+		ValDisplay dtApp value=_NUM:NumPts*DimDelta(InData,0)*1000
+		Variable df=dfMeas[in_data_num] 
+		ValDisplay dfDisp value=0
+		ValDisplay dfDisp value=_NUM:df
+		
+		Variable Rser=RserMeas[in_data_num]
+	
+		// Make current, bias, resistance avarage waves
+		Make/O /N=(NumSegmPSD) root:Measured_data:Avg_data:$(S_fileName+"_I_Avg")
+		Make/O /N=(NumSegmPSD) root:Measured_data:Avg_data:$(S_fileName+"_VarI_Avg")
+		Make/O /N=(NumSegmPSD) root:Measured_data:Avg_data:$(S_fileName+"_V_Avg")
+		Make/O /N=(NumSegmPSD) root:Measured_data:Avg_data:$(S_fileName+"_R_Avg")
+		Wave I_avg= root:Measured_data:Avg_data:$(S_fileName+"_I_Avg")
+		Wave VarI_avg= root:Measured_data:Avg_data:$(S_fileName+"_VarI_Avg")
+		Wave V_avg= root:Measured_data:Avg_data:$(S_fileName+"_V_Avg")
+		Wave R_avg= root:Measured_data:Avg_data:$(S_fileName+"_R_Avg")
+		Wave Drive_mV_steps=root:Measured_data:$(S_fileName+"_V")
+		Wave Resistance=root:Measured_data:$(S_fileName+"_R")
+		
+		Make/O /N=(NumPts/2,NumFFT) root:PSD_out:$(S_fileName+"_PSDs")
+		Wave FFT_res0=root:PSD_out:$(S_fileName+"_PSDs")
+		FFT_res0=0
+		Make/O /N=(NumPts/2,NumSegmPSD) root:PSD_out:$(S_fileName+"_AvgPSD")
+		Wave FFT_avg0= root:PSD_out:$(S_fileName+"_AvgPSD")
+		FFT_avg0=0
+		
+		Make /O root:FFT_temp
+		Wave FFT_temp=root:FFT_temp
+		Variable start=0
+		Variable end_d=0
+		Variable indPL=0
+		Variable ind=0
+		Variable temp_fft_done=0
+		
+		//Platónkénti for ciklus
+		for(indPL=0;indPL<NumSegmPSD;indPL=indPL+1)
+			I_avg[indPL]=mean(InData,pnt2x(InData,SegmPSD[indPL][2]),pnt2x(InData,SegmPSD[indPL][3]))
+			VarI_avg[indPL]=variance(InData,pnt2x(InData,SegmPSD[indPL][2]),pnt2x(InData,SegmPSD[indPL][3]))
+			V_avg[indPL]=mean(Drive_mV_steps,pnt2x(Drive_mV_steps,SegmPSD[indPL][2]),pnt2x(Drive_mV_steps,SegmPSD[indPL][3]))
+			R_avg[indPL]=V_avg[indPL]/I_avg[indPL]/1000-Rser
+			//dt-nkénti for ciklus
+			for(ind=0;ind<SegmPSD[indPL][4];ind=ind+1)
+				FFT_temp=0
+				start=ind*NumPts+SegmPSD[indPL][2]
+				end_d=(ind+1)*NumPts-1+SegmPSD[indPL][2]
+				FFT/Out=4/RP=[start,end_d]/DEST=FFT_temp InData
+			//	EZAJÓ NORMÁLÁS TUTI!!!! *2 - a képzetes->valós átszámítás miatt, 1/Numpts^2 - a pontok számával normál, 1/df - a frekvenciafelbontással normál
+				FFT_temp=FFT_temp*2/NumPts/NumPts/(1/(NumPts/SampleRate)) // norm: 2*1/LengthData*1/LengthData*1/df
+				FFT_res0[][temp_fft_done]=FFT_temp[p]
+				//Calculate Avg FFT
+				FFT_avg0[][indPL]=FFT_avg0[p][indPL]+FFT_res0[p][temp_fft_done]
+				temp_fft_done+=1
+			endfor
+			FFT_avg0[][indPL]=FFT_avg0[p][indPL]/SegmPSD[indPL][4]
+		endfor
+		KillWaves FFT_temp
+		SetScale/I x 0,1/DimDelta(InData,0)/2,"",  FFT_res0
+		SetScale/I x 0,1/DimDelta(InData,0)/2,"",  FFT_Avg0
+		//Calculate PSDs
+		FFT_res0=sqrt(FFT_res0)
+		FFT_Avg0=sqrt(FFT_Avg0)
+	endif
+End
+
+
+Function SavePSDs()
+	Wave /T In_data_names=root:Program_variables:In_data_names
+	Wave /T Full_path=root:Program_variables:Full_path
+	//Kiválasztja az adott mérést
+	//Az utolsó sor üres, ez védi le, hogy ekkor ne legyen ábrázolás. Továbbá ha nincs betöltve mért adat, akkor sem fut le. Az if vége a függvény végén van.
+	NVAR data_sel=root:Program_variables:data_sel
+	if(data_sel!=DimSize(In_data_names,0)-1)
+		String In_data=In_data_names[data_sel]
+		String path=Full_path[data_sel]
+		path = path + In_data
+		Variable file_save
+		Wave df=root:Measured_data:Aux_data:dfMeas
+		Wave Rser=root:Measured_data:Aux_data:RserMeas
+		Wave Gain=root:Measured_data:Aux_data:GainMeas
+		
+		Wave SegmPSD=root:Measured_data:Aux_data:$(In_data+"_SegmPSD")
+		Wave ch0=$("root:PSD_out:'"+In_data+"_AvgPSD'")
+		Variable i=0
+		Wave drive=root:Measured_data:Avg_data:$(In_data+"_V_Avg")
+		Wave res=root:Measured_data:Avg_data:$(In_data+"_R_Avg")
+		Wave curr=root:Measured_data:Avg_data:$(In_data+"_I_Avg")
+		Wave varcurr=root:Measured_data:Avg_data:$(In_data+"_VarI_Avg")
+		
+		for(i=0;i<DimSize(ch0,1);i=i+1) 
+			Open /P=home file_save as In_data+"_Segm_"+num2str(i)
+			//header
+			// first line: drive voltage, mean current, mean resistance
+			// second line: df, NumAvg, Rser, Gain, CutStart_abs, CutStop_abs
+			fprintf file_save, "%g;%g;%g;%s ;%g\n%g;%g;%g;%g;%0.0f;%0.0f\n", drive[i],curr[i],res[i],path,varcurr[i],df[data_sel],SegmPSD[i][4],Rser[data_sel],Gain[data_sel],SegmPSD[i][2],SegmPSD[i][3]
+			Make /O/N=(DimSize(ch0,0)) temp0
+			temp0[]=ch0[p][i]
+			wfprintf file_save, "", temp0
+			close file_save
+			KillWaves temp0
+		endfor
+	endif
+End
+
+
+Function CompOFFsetFun()
+
+	Wave /T In_data_names=root:Program_variables:In_data_names
+	//Kiválasztja az adott mérést
+	//Az utolsó sor üres, ez védi le, hogy ekkor ne legyen ábrázolás. Továbbá ha nincs betöltve mért adat, akkor sem fut le. Az if vége a függvény végén van.
+	NVAR data_sel=root:Program_variables:data_sel
+	if(data_sel!=DimSize(In_data_names,0)-1)
+		String In_data=In_data_names[data_sel]
+		Wave GainMeas=root:Measured_data:Aux_data:GainMeas
+		Wave ProgCompOffset=root:Measured_data:Aux_data:ProgCompOffset
+		Wave CardOffsetMeas=root:Measured_data:Aux_data:CardOffsetMeas
+		Wave AgilentOffsetMeas=root:Measured_data:Aux_data:AgilentOffsetMeas
+		Wave Rser=root:Measured_data:Aux_data:RserMeas
+		Variable Rserial=Rser[data_sel]
+		Wave drive_avg=root:Measured_data:Avg_data:$(In_data+"_V_Avg")
+		Wave res_avg=root:Measured_data:Avg_data:$(In_data+"_R_Avg")
+		Wave curr_avg=root:Measured_data:Avg_data:$(In_data+"_I_Avg")
+		Wave drive_cont=root:Measured_data:$(In_data+"_V")
+		Wave res_cont=root:Measured_data:$(In_data+"_R")
+		Wave curr_cont=root:Measured_data:$(In_data+"_I")
+		
+		//Ha volt már kompenzálva, visszakompenzál 0 ProgOffset-t és az AgilentOffsettel is UTÓBBI MÉG NEM CSINÁL SEMMIT? MERT NINCS AZ ÚJ AGILENT OFFSET-re ÚJ VÁLTOZÓ, LEHET NiNCS IS SOK ÉRTELME
+		drive_avg-=(ProgCompOffset[data_sel])
+		drive_cont-=(ProgCompOffset[data_sel])
+		//Lekéri az új értéket és azzal kompenzál
+		ControlInfo CompOffsetVar
+		ProgCompOffset[data_sel]=V_Value
+		drive_avg+=(ProgCompOffset[data_sel])
+		drive_cont+=(ProgCompOffset[data_sel])
+		//A CardOffsettel visszakompenzál EZ A FUNKCIÓ MÉG NEM AKTÍV
+		//curr_cont+=(CardOffsetMeas[data_sel]/GainMeas[data_sel])
+		//curr_avg+=(CardOffsetMeas[data_sel]/GainMeas[data_sel])
+		//curr_cont-=(CardOffsetMeas[data_sel]/GainMeas[data_sel])
+		//curr_avg-=(CardOffsetMeas[data_sel]/GainMeas[data_sel])
+		
+		Wave AmplModeMeas=root:Measured_data:Aux_data:AmplModeMeas
+		if(AmplModeMeas[data_sel]==0)
+		
+		elseif(AmplModeMeas[data_sel]==1)
+			res_cont=drive_cont/1000/(curr_cont)-Rserial
+			res_avg=drive_avg/1000/(curr_avg)-Rserial
+		endif
+	endif
+	
+End
+
+	
+Function CutDataFun()
+	Wave /T In_data_names=root:Program_variables:In_data_names
+	//Kiválasztja az adott mérést
+	//Az utolsó sor üres, ez védi le, hogy ekkor ne legyen ábrázolás. Továbbá ha nincs betöltve mért adat, akkor sem fut le. Az if vége a függvény végén van.
+	NVAR data_sel=root:Program_variables:data_sel
+	NVar CurrSegment=root:Signal_variables:CurrSegment
+	
+	if(data_sel!=DimSize(In_data_names,0)-1)
+		String In_data=In_data_names[data_sel]
+		Wave SegmPSD=root:Measured_data:Aux_data:$(In_data+"_SegmPSD")
+		Wave FFTptMeas=root:Measured_data:Aux_data:FFTptMeas
+		Variable NumPts=FFTptMeas[data_sel]
+		
+		Variable EndPt = SegmPSD[CurrSegment][2]+pcsr(B,"Panel0#G0")
+		Variable StartPt = SegmPSD[CurrSegment][2]+pcsr(A,"Panel0#G0")
+		Variable NumAvg = floor((EndPt-StartPt)/FFTptMeas[data_sel])
+		
+		if(NumAvg == 0)
+			//if cutted data is not long enough to apply the desired dt
+			DoAlert /T="Warning: Not enough points!" 0, "Wrong settings! There are not enough FFT points for at least one segment!\rReview the location of the cursors!"
+		else		
+			SegmPSD[CurrSegment][3]=EndPt
+			SegmPSD[CurrSegment][2]=StartPt
+			SegmPSD[CurrSegment][4]=NumAvg
+		endif
+	endif
+End
+
